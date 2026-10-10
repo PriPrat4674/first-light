@@ -2,6 +2,7 @@ package app.firstlight.alarm;
 
 import android.Manifest;
 import android.app.NotificationManager;
+import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -14,6 +15,7 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Base64;
+import androidx.core.content.FileProvider;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -379,6 +381,44 @@ public class FirstLightPlugin extends Plugin {
             }
         }
         call.resolve(r);
+    }
+
+    /* ---------------- files & widget ---------------- */
+
+    /** Saves a file to the app's cache and opens Android's share sheet for it (backups, story cards). */
+    @PluginMethod
+    public void shareFile(PluginCall call) {
+        String name = call.getString("name", "first-light");
+        String mime = call.getString("mime", "application/octet-stream");
+        String data = call.getString("base64");
+        if (data == null || name == null || !name.matches("[A-Za-z0-9._-]{1,80}")) { call.reject("Bad file"); return; }
+        try {
+            File dir = new File(getContext().getCacheDir(), "shared");
+            if (!dir.exists() && !dir.mkdirs()) { call.reject("No space"); return; }
+            File f = new File(dir, name);
+            try (FileOutputStream out = new FileOutputStream(f)) { out.write(Base64.decode(data, Base64.DEFAULT)); }
+            Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", f);
+            Intent send = new Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri);
+            send.setClipData(ClipData.newRawUri(name, uri));
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(send, call.getString("title", "Share"));
+            if (getActivity() != null) getActivity().startActivity(chooser);
+            else getContext().startActivity(chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            JSObject r = new JSObject();
+            r.put("ok", true);
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject("Couldn't share the file", e);
+        }
+    }
+
+    /** The home-screen widget's streak. */
+    @PluginMethod
+    public void setWidget(PluginCall call) {
+        Integer streak = call.getInt("streak");
+        if (streak != null) Prefs.sp(getContext()).edit().putInt("widget_streak", Math.max(0, streak)).apply();
+        PipWidgetProvider.updateAll(getContext());
+        call.resolve();
     }
 
     /* ---------------- launch info ---------------- */

@@ -52,6 +52,7 @@ class App:
 
     async def open(self, *, battery=(0.82, False), clock=True, seed=None, deny_camera=False, spotify=None, youtube=None, sw='block', onboarded=True, native=None, greet=False, at=None, net=None, viewport=None):
         self.ctx = await self.browser.new_context(viewport=viewport or {'width': 390, 'height': 844}, service_workers=sw, timezone_id='Asia/Kolkata')
+        await self.ctx.grant_permissions(['accelerometer', 'gyroscope', 'magnetometer'])
         await self._route_net(net or {})
         seed = dict(seed or {})
         if onboarded and 'fl:profile' not in seed:
@@ -272,7 +273,7 @@ async def t_tabs(a):
     for tab, head in [('tasks', 'Morning tasks'), ('sounds', 'Music'), ('progress', 'Progress'), ('alarm', 'First Light')]:
         await a.tab(tab)
         check(head == await pg.inner_text('#appbar .ab-title'), f'{tab} title')
-    check('mornings proven in a row' in await pg.inner_text('[data-tab=progress]'), 'progress caption')
+    check('mornings in a row' in await pg.inner_text('[data-tab=progress]'), 'progress caption')
 
 @test('App', 'valid', '☰ menu opens each settings group on its own page; Back returns; Escape closes the menu')
 async def t_menu(a):
@@ -302,7 +303,7 @@ async def t_a11y(a):
     pg = await a.open()
     for tab in ['alarm', 'tasks', 'sounds', 'progress', 'settings']:
         await a.tab(tab)
-        bad = await pg.evaluate("() => [...document.querySelectorAll('main button, nav button, #appbar button')].filter(b => b.offsetParent && !(b.innerText.trim() || b.getAttribute('aria-label'))).map(b => b.outerHTML.slice(0, 80))")
+        bad = await pg.evaluate("() => [...document.querySelectorAll('main button, nav button, #appbar button')].filter(b => b.checkVisibility() && !(b.innerText.trim() || b.getAttribute('aria-label'))).map(b => b.outerHTML.slice(0, 80))")
         check(not bad, f'unnamed buttons on {tab}: {bad}')
 
 @test('App', 'invalid', 'Corrupted saved data falls back to defaults instead of crashing')
@@ -459,7 +460,7 @@ async def t_batt_unsupported(a):
     pg = await a.open(battery='none')
     await a.arm_by_keyboard()
     check(await a.js('features/alarm.js', 'm.status().armed'), 'armed')
-    check('can’t read your battery' in await a.toast_text(), 'advice toast expected')
+    check('read the battery' in await a.toast_text(), 'advice toast expected')
 
 @test('Battery', 'invalid', 'Guard levels stay sensible: switch-off level can’t reach the warning level')
 async def t_batt_limits(a):
@@ -598,7 +599,7 @@ async def t_snooze_test(a):
     await pg.click('#morning [data-ref=up]'); await pg.wait_for_timeout(150)
     await a.type_phrase(); await pg.click('#morning [data-ref=close]')
     await a.tab('progress')
-    check('Spotless' in await pg.inner_text('[data-tab=progress]'), 'test snooze hidden')
+    check(not await pg.query_selector('.cal .day.snoozed'), 'test snooze not on the calendar')
     check(await a.js('features/stats.js', 'm.get().totals.snoozes') == 0, 'not counted')
 
 # ---------- Check-in
@@ -650,7 +651,8 @@ async def t_checkin_after_done(a):
 async def t_task_add(a):
     pg = await a.open(clock=False)
     await a.tab('tasks')
-    await pg.click('[data-tpl="0"]')
+    await pg.click('[data-add]'); await pg.wait_for_timeout(100)
+    await pg.click('.sheet [data-tpl="0"]')
     await pg.reload(); await pg.wait_for_timeout(500)
     check('Make the bed' in await a.js('features/tasks.js', 'm.all().map(t => t.name)'), 'saved')
 
@@ -686,7 +688,7 @@ async def t_task_max(a):
     await a.js('features/tasks.js', 'Array.from({length: 20}, () => m.add()).filter(Boolean).length')
     check(len(await a.js('features/tasks.js', 'm.all()')) == 12, 'capped at 12')
     await a.tab('tasks')
-    check(await pg.is_disabled('[data-tpl="0"]'), 'quick-add disabled when full')
+    check(await pg.is_disabled('[data-add]'), 'Add disabled when full')
 
 @test('Tasks', 'valid', 'A task with a wait stays locked until the wait is over')
 async def t_task_lock(a):
@@ -1067,23 +1069,24 @@ def ms(dt):
 NO_PROMPTS = {'fl:sleep': {'prompts': False}}
 
 # ---------- Onboarding
-@test('Onboarding', 'valid', 'First run: setup walks through name, logo, colour, theme, font, style, sleep; choices are saved')
+@test('Onboarding', 'valid', 'First run is short: name, theme, sleep; choices are saved and Pip greets you')
 async def t_onboard(a):
     pg = await a.open(onboarded=False, clock=False)
     check(await a.visible('#onboarding'), 'setup shown on first run')
-    await pg.fill('#onboarding [data-ref=name]', 'Priya'); await pg.click('[data-ob=next]')
-    for kind, value in [('logo', 'tiger'), ('accent', 'rose'), ('theme', 'midnight'), ('font', 'modern'), ('style', 'soft')]:
-        await pg.click(f'[data-pick={kind}][data-value={value}]'); await pg.wait_for_timeout(120)
-        check(await pg.evaluate(f"document.documentElement.dataset.{kind if kind != 'logo' else 'theme'} !== undefined"), 'applied live')
-        await pg.click('[data-ob=next]'); await pg.wait_for_timeout(150)
+    steps = await pg.evaluate("document.querySelectorAll('.ob-dots i').length")
+    check(steps == 3, f'three steps in the browser, not nine: {steps}')
+    await pg.fill('#onboarding [data-ref=name]', 'Priya'); await pg.click('[data-ob=next]'); await pg.wait_for_timeout(150)
+    await pg.click('[data-pick=theme][data-value=midnight]'); await pg.wait_for_timeout(120)
+    check(await pg.evaluate("document.documentElement.dataset.theme") == 'midnight', 'applied live')
+    await pg.click('[data-ob=next]'); await pg.wait_for_timeout(150)
     await pg.fill('#onboarding [data-ref=bed]', '23:30'); await pg.dispatch_event('#onboarding [data-ref=bed]', 'change')
     await pg.fill('#onboarding [data-ref=wake]', '05:45'); await pg.dispatch_event('#onboarding [data-ref=wake]', 'change')
-    await pg.click('[data-ob=next]'); await pg.wait_for_timeout(200)
-    check('All set, Priya' in await pg.inner_text('#onboarding'), 'done step greets by name')
+    check('Let’s go' in await pg.inner_text('[data-ob=next]'), 'last step says Let’s go')
     await pg.click('[data-ob=next]'); await pg.wait_for_timeout(500)
     check(not await a.visible('#onboarding'), 'setup closes')
     p = await a.js('features/profile.js', 'm.get()')
-    check(p['name'] == 'Priya' and p['logo'] == 'tiger' and p['accent'] == 'rose' and p['theme'] == 'midnight' and p['font'] == 'modern' and p['style'] == 'soft' and p['onboarded'], f'profile {p}')
+    check(p['name'] == 'Priya' and p['theme'] == 'midnight' and p['onboarded'], f'profile {p}')
+    check(p['logo'] == 'sunrise' and p['font'] == 'classic', 'logo and font keep their defaults (Look & feel)')
     check(await a.js('features/alarm.js', 'm.status().time') == '05:45', 'alarm set to the wake-up time')
     check(await a.js('features/sleep.js', 'm.get().schedule.bed') == '23:30', 'bedtime saved')
     await pg.reload(); await pg.wait_for_timeout(500)
@@ -1094,9 +1097,9 @@ async def t_onboard(a):
 async def t_onboard_skip(a):
     pg = await a.open(onboarded=False, clock=False)
     await pg.click('[data-ob=skip]'); await pg.wait_for_timeout(150)
-    await pg.click('[data-pick=logo][data-value=bell]'); await pg.click('[data-ob=next]'); await pg.wait_for_timeout(150)
+    await pg.click('[data-pick=theme][data-value=tokyo]'); await pg.click('[data-ob=next]'); await pg.wait_for_timeout(150)
     await pg.click('[data-ob=back]'); await pg.wait_for_timeout(150)
-    check(await pg.get_attribute('[data-pick=logo][data-value=bell]', 'aria-pressed') == 'true', 'choice kept after Back')
+    check(await pg.get_attribute('[data-pick=theme][data-value=tokyo]', 'aria-pressed') == 'true', 'choice kept after Back')
     check(await a.js('features/profile.js', 'm.get().name') == '', 'no name saved')
 
 @test('Onboarding', 'invalid', 'Names are cleaned: no HTML, extra spaces, or over-long text')
@@ -1182,7 +1185,7 @@ async def t_settings_look(a):
     await pg.reload(); await pg.wait_for_timeout(500)
     d = await pg.evaluate('({...document.documentElement.dataset})')
     check(d['theme'] == 'ivory' and d['font'] == 'typewriter', f'saved {d}')
-    bg = await pg.evaluate("getComputedStyle(document.body).backgroundColor")
+    bg = await pg.evaluate("getComputedStyle(document.documentElement).backgroundColor")
     check(bg == 'rgb(246, 241, 231)', f'ivory background applied: {bg}')
 
 # ---------- Messages
@@ -1192,7 +1195,7 @@ async def t_msg_early(a):
     r = await a.js('features/messages.js', "[...Array(14)].map((_, i) => m.alarmMessage('04:00', { date: new Date(2026, 9, 5 + i) }))")
     check(all('Oho' in x for x in r), f'messages {set(r)}')
     await pg.fill('[data-ref=time]', '04:00'); await pg.dispatch_event('[data-ref=time]', 'change'); await pg.wait_for_timeout(150)
-    check('Oho' in await pg.inner_text('[data-ref=msg]'), 'shown on the Alarm tab')
+    check('oho' in (await pg.inner_text('.pet-card')).lower(), 'Pip says it on the Alarm tab')
 
 @test('Messages', 'valid', 'Messages change by day and time, mention streaks, and handle weekends')
 async def t_msg_vary(a):
@@ -1206,8 +1209,8 @@ async def t_msg_vary(a):
       hello: [2, 9, 14, 19, 23].map((h) => m.greeting('Priya', h))
     })""")
     check(r['days'] >= 2, 'varies day to day')
-    check('🐯' in r['owl'] or 'Legendary' in r['owl'] or 'Bold' in r['owl'], f"very early line {r['owl']}")
-    check('Streak: 5 🔥' in r['streak'], 'streak mentioned')
+    check('Whoa' in r['owl'] or 'Legendary' in r['owl'] or 'Bold' in r['owl'], f"very early line {r['owl']}")
+    check('Streak: 5' in r['streak'], 'streak mentioned')
     check(isinstance(r['junk'], str) and len(r['junk']) > 5, 'bad input still gives a message')
     check(r['hello'][1].startswith('Good morning, Priya') and r['hello'][3].startswith('Good evening') and 'late' in r['hello'][0].lower(), f"greetings {r['hello']}")
 
@@ -1345,7 +1348,7 @@ async def t_sunday(a):
     pg = await a.open(at=ms(sat), seed={'fl:sleep': {'prompts': False, 'nights': nights_seed(sat, 5, 6)}})
     adv = await a.js('features/sleep.js', 'm.sundayAdvice()')
     check(adv and adv['minutes'] == 120 and adv['debt'] == 10, f'advice {adv}')
-    check('Sunday sleep-in' in await pg.inner_text('.sleep-card'), 'card shown')
+    check('Sunday' in await pg.inner_text('.sleep-card'), 'Sunday row shown')
     await pg.click('.sleep-card [data-ref=sleepin]'); await pg.wait_for_timeout(150)
     check(await a.js('features/alarm.js', "m.status().overrides['2026-10-18']") == '08:30', 'Sunday alarm 06:30 → 08:30')
     await a.js('features/alarm.js', '(m.arm(), true)'); await pg.wait_for_timeout(200)
@@ -1518,7 +1521,7 @@ async def t_native_perms(a):
 @test('Android', 'valid', 'First-run setup includes a permissions step that can ask for notifications')
 async def t_native_onboard(a):
     pg = await a.open(native={'status': {'notifications': False}}, onboarded=False, clock=False)
-    for _ in range(7):
+    for _ in range(3):
         if await pg.query_selector('[data-ob=skip]') and 'name' in (await pg.get_attribute('.ob-step', 'data-step')): await pg.click('[data-ob=skip]')
         else: await pg.click('[data-ob=next]')
         await pg.wait_for_timeout(200)
@@ -1618,31 +1621,32 @@ async def set_visibility(a, state):
       document.dispatchEvent(new Event('visibilitychange')); }}""")
 
 # ---------- City themes
-@test('Cities', 'valid', 'Kerala theme: skyline, live weather, and an upbeat headline (gloomy news is skipped)')
+@test('Cities', 'valid', 'Kerala theme: skyline, live weather in one line; tap it for an upbeat headline and a fact (gloomy news is skipped)')
 async def t_city_card(a):
     pg = await a.open(seed=KERALA, at=ms(ist(2026, 10, 14, 7)))
     await a.tick(1500)
-    card = await pg.inner_text('.city-card')
-    check('Kerala' in card and '27°' in card and 'Rain' in card, f'city card {card!r}')
-    check('killed' not in card.lower(), 'gloomy headline skipped')
+    line = await pg.inner_text('.place-line')
+    check('Kerala' in line and '27°' in line and 'Rain' in line, f'place line {line!r}')
+    check(await pg.query_selector('.place-line .wx-ico'), 'weather drawn as an icon, not an emoji')
     check(await pg.query_selector('.scene.city-kerala .skyline'), 'Kerala skyline drawn')
     check(await pg.query_selector('.scene .fx-rain'), 'rain in the sky when it rains there')
     kinds = {k for k, _ in a.net_calls}
     check({'weather', 'news', 'wiki'} <= kinds, f'all three sources asked: {kinds}')
-    first = await pg.inner_text('.city-line')
-    await pg.click('.city-card [data-ref=swap]'); await pg.wait_for_timeout(100)
-    second = await pg.inner_text('.city-line')
-    check(first != second and ('robotics award' in first + second) and ('Kathakali' in first + second), f'headline and fact alternate: {first!r} / {second!r}')
-    await pg.click('.city-card [data-ref=swap]'); await pg.wait_for_timeout(100)
+    await pg.click('.place-line'); await pg.wait_for_timeout(150)
+    more = await pg.inner_text('.sheet')
+    check('robotics award' in more and 'Kathakali' in more, f'headline and fact in the sheet: {more!r}')
+    check('killed' not in more.lower(), 'gloomy headline skipped')
 
-@test('Cities', 'invalid', 'Offline or blocked: the city card still shows a built-in fact, with no errors')
+@test('Cities', 'invalid', 'Offline or blocked: no made-up weather, and a built-in fact is still there')
 async def t_city_offline(a):
     pg = await a.open(seed={**KERALA, 'fl:profile': {**KERALA['fl:profile'], 'theme': 'tokyo'}}, net={'weather': 'fail', 'news': 'fail', 'wiki': 'fail'}, at=ms(ist(2026, 10, 14, 7)))
     await a.tick(1500)
-    card = await pg.inner_text('.city-card')
+    line = await pg.inner_text('.place-line')
+    check('Tokyo' in line and not await pg.query_selector('.place-line .wx'), f'no made-up weather: {line!r}')
+    await pg.click('.place-line'); await pg.wait_for_timeout(150)
     facts = await a.js('features/places.js', 'm.PLACES.tokyo.facts')
-    check('Tokyo' in card and any(f in card for f in facts), f'offline fact shown: {card!r}')
-    check(not await pg.query_selector('.city-card .wx'), 'no made-up weather')
+    more = await pg.inner_text('.sheet')
+    check(any(f in more for f in facts), f'offline fact shown: {more!r}')
 
 @test('Cities', 'invalid', 'Only upbeat, well-formed headlines are used; titles are cleaned')
 async def t_city_headlines(a):
@@ -1658,9 +1662,8 @@ async def t_city_native(a):
     await a.tick(1500)
     http = [c['args']['url'] for c in await a.native_calls('get') if c['plugin'] == 'CapacitorHttp']
     check(any('gdeltproject' in u for u in http) and any('open-meteo' in u for u in http), f'native HTTP used: {http}')
-    if not await pg.query_selector('.city-card [data-open^="https://news"]'):
-        await pg.click('.city-card [data-ref=swap]'); await pg.wait_for_timeout(100)
-    await pg.click('.city-card [data-open]'); await pg.wait_for_timeout(100)
+    await pg.click('.place-line'); await pg.wait_for_timeout(150)
+    await pg.click('.sheet [data-open^="https://news"]'); await pg.wait_for_timeout(100)
     opened = await pg.evaluate('window.__opened || []')
     check(opened and opened[0].startswith('https://'), f'opened outside: {opened}')
 
@@ -1691,10 +1694,10 @@ async def t_sky_phases(a):
     await a.jump(6 * 3600e3)               # 12:20
     st = await state()
     check(st['phase'] == 'noon' and st['lit'] >= 30, f'noon {st}')
-    await a.jump(5 * 3600e3 + 40 * 60e3)   # 18:00
+    await a.jump(5 * 3600e3)               # 17:20 (India sets around 17:55 in mid-October)
     st = await state()
     check(st['phase'] == 'golden' and st['warm'] > 0, f'golden {st}')
-    await a.jump(3 * 3600e3)               # 21:00
+    await a.jump(3 * 3600e3 + 40 * 60e3)   # 21:00
     check((await state())['phase'] == 'night', 'night again')
 
 @test('Sky', 'valid', 'City weather shows in the sky: fog in San Francisco, snow in Seoul, clouds in Tokyo')
@@ -1839,7 +1842,7 @@ async def t_leave(a):
     await pg.click('#checkin [data-ref=yes]'); await pg.wait_for_timeout(150)
     check(not await a.visible('#morning'), 'and you stay where you were')
     await a.tick(5 * 60e3)
-    check(await pg.query_selector('#appbar .pill.ready') and '📸' in await pg.inner_text('#appbar .pill'), 'pill says it’s time')
+    check(await pg.query_selector('#appbar .pill.ready') and 'ready' in await pg.inner_text('#appbar .pill'), 'pill says it’s time')
     check('time to prove it' in await a.toast_text(), 'and tells you')
     await pg.click('#appbar .pill'); await pg.wait_for_timeout(150)
     check(await a.visible('#morning') and await a.visible('#morning [data-gate] button.gold'), 'tap the pill to go back')
@@ -1960,6 +1963,191 @@ async def t_boost_links(a):
     check(src and src.startswith('https://www.youtube.com/embed/aqz-KE-bpKQ'), f'YouTube embed {src}')
     await a.tick(8500)
     check(await pg.is_enabled('#boost [data-ref=close]'), 'can close after a few seconds')
+
+# ---------- 3.2: weather loading, shake to stop, motion tasks, wardrobe, streak freeze, backup, sky, icons
+SHAKE = "window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: %s, y: 0, z: %s } }))"
+
+async def motion(pg, x, z, gap):
+    await pg.evaluate(SHAKE % (x, z))
+    await pg.clock.run_for(gap)
+
+@test('Cities', 'valid', 'Switching cities quickly still loads every city’s weather (no request is dropped)')
+async def t_city_switch(a):
+    pg = await a.open(seed=KERALA, at=ms(ist(2026, 10, 14, 7)))
+    for t in ['newyork', 'sanfrancisco', 'tokyo', 'seoul']:
+        await a.js('features/profile.js', f"m.set('theme', '{t}')")
+    await a.tick(1500)
+    lats = [u.split('latitude=')[1].split('&')[0] for k, u in a.net_calls if k == 'weather']
+    for lat in ['40.7128', '37.7749', '35.6762', '37.5665']:
+        check(lat in lats, f'weather asked for {lat}: {lats}')
+    check('27°' in await pg.inner_text('.place-line'), 'the last city shows its weather')
+
+@test('Morning', 'valid', 'Shake to stop (opt-in): the phrase alone keeps ringing, 25 real shakes stop it, and there is no tap-instead button')
+async def t_shake_stop(a):
+    pg = await a.open(seed={'fl:tasks': [], 'fl:stop-rules': {'shake': True}})
+    await a.fire_direct(test=True); await a.type_phrase()
+    check(await a.phase() == 'ringing', 'still ringing after the phrase')
+    check('shake' in (await pg.inner_text('#morning')).lower(), 'asks for shakes')
+    check(not await pg.query_selector('#morning [data-ref=shakeSim]'), 'no tap-to-shake button')
+    for _ in range(24):
+        await motion(pg, 22, 9.8, 120); await motion(pg, 0, 9.8, 130)
+    check(await a.phase() == 'ringing', 'still ringing at 24 shakes')
+    await motion(pg, 22, 9.8, 120); await pg.wait_for_timeout(200)
+    check(await a.phase() != 'ringing', 'the 25th shake stops it')
+
+@test('Morning', 'invalid', 'Shake to stop on a phone with no motion sensor: the phrase is enough, and it says so')
+async def t_shake_nosensor(a):
+    pg = await a.open(seed={'fl:tasks': [], 'fl:stop-rules': {'shake': True}})
+    await a.fire_direct(test=True); await a.type_phrase()
+    await a.tick(4000)
+    check(await a.phase() != 'ringing', 'stopped once no sensor answered')
+    check('motion sensor' in await a.toast_text(), 'explained')
+
+@test('Morning', 'valid', 'Walk 25 steps counts real steps only: no free steps, and shaking isn’t walking')
+async def t_steps(a):
+    task = [{'id': 'w', 'name': 'Walk', 'proof': 'x', 'gapMin': 0, 'kind': 'steps', 'target': 5}]
+    pg = await a.open(seed={'fl:tasks': task})
+    await a.fire_direct(test=False); await a.type_phrase()
+    await pg.click('#morning [data-gate] button.gold'); await pg.wait_for_timeout(100)
+    check((await pg.inner_text('#morning .motion-count')).startswith('0'), 'starts at zero')
+    for _ in range(2):
+        await motion(pg, 0, 11.5, 150); await motion(pg, 0, 9.7, 200)
+    check((await pg.inner_text('#morning .motion-count')).startswith('2'), 'two steps')
+    for _ in range(6):
+        await motion(pg, 24, 9.8, 120); await motion(pg, 0, 9.8, 120)
+    for _ in range(40):
+        await motion(pg, 0, 9.81, 20)
+    check((await pg.inner_text('#morning .motion-count')).startswith('2'), 'shakes didn’t count')
+    for _ in range(3):
+        await motion(pg, 0, 11.5, 150); await motion(pg, 0, 9.7, 200)
+    await pg.wait_for_timeout(200)
+    check(await a.phase() == 'done', 'task done at 5 steps')
+
+@test('Morning', 'invalid', 'A motion task on a phone with no motion sensor asks for a photo instead (never a tap)')
+async def t_steps_nosensor(a):
+    task = [{'id': 'w', 'name': 'Walk', 'proof': 'x', 'gapMin': 0, 'kind': 'steps', 'target': 25}]
+    pg = await a.open(seed={'fl:tasks': task})
+    await a.fire_direct(test=False); await a.type_phrase()
+    await pg.click('#morning [data-gate] button.gold'); await pg.wait_for_timeout(300); await a.tick(4000)
+    gate = await pg.inner_text('#morning'); check('Take a photo instead' in gate, f'photo fallback: {gate!r}')
+
+@test('Pip', 'valid', 'Wardrobe: items unlock with your best streak and are drawn on Pip’s artwork')
+async def t_wardrobe(a):
+    pg = await a.open(seed={'fl:streak': {'streak': 0, 'best': 8, 'wins': 8, 'lastWin': None, 'history': []}})
+    await a.tab('settings', 'you')
+    check(not await pg.is_disabled('[data-wear=mug]') and await pg.is_disabled('[data-wear=scarf]'), 'mug open at 8 days, scarf locked')
+    check(await pg.evaluate("(() => { const w = document.querySelector('.wardrobe'); return w.scrollWidth <= w.clientWidth; })()"), 'fits its card')
+    await pg.click('[data-wear=mug]'); await a.tab('alarm')
+    check(await pg.query_selector('.pet-card .pet-art .pet-acc-mug'), 'mug drawn on Pip')
+    await a.close()
+    b = App(a.browser)
+    pg2 = await b.open(seed={'fl:profile': {'name': 'P', 'onboarded': True, 'accessory': 'crown'}})
+    check(not await pg2.query_selector('.pet-card .pet-acc'), 'a locked item (e.g. from a backup) isn’t shown')
+    await b.close()
+
+@test('Progress', 'valid', 'A streak freeze covers exactly one missed day, and just looking never spends it')
+async def t_freeze(a):
+    pg = await a.open(at=ms(ist(2026, 10, 14, 9)), seed={'fl:streak': {'streak': 5, 'best': 5, 'wins': 5, 'lastWin': '2026-10-12', 'freezes': 1, 'history': []}})
+    s = await a.js('features/stats.js', '[m.currentStreak(), m.currentStreak(), m.get()]')
+    check(s[0] == 5 and s[1] == 5 and s[2]['freezes'] == 0, f'one missed day kept by a freeze: {s[2]}')
+    check(s[2]['history'][0]['outcome'] == 'frozen', 'frozen day recorded')
+    await a.tab('progress')
+    check('1 freeze' not in await pg.inner_text('[data-tab=progress]'), 'no freezes left')
+    await a.close()
+    b = App(a.browser)
+    await b.open(at=ms(ist(2026, 10, 14, 9)), seed={'fl:streak': {'streak': 5, 'best': 5, 'wins': 5, 'lastWin': '2026-10-11', 'freezes': 1, 'history': []}})
+    s = await b.js('features/stats.js', '[m.currentStreak(), m.get().freezes]')
+    check(s == [0, 1], f'two missed days break it; the freeze is kept: {s}')
+    await b.close()
+
+@test('Progress', 'valid', 'Vacation mode pauses the streak and picks it up again when switched off')
+async def t_vacation(a):
+    pg = await a.open(at=ms(ist(2026, 10, 14, 9)), seed={'fl:streak': {'streak': 6, 'best': 6, 'wins': 6, 'lastWin': '2026-10-13', 'freezes': 0, 'history': []}})
+    await a.js('features/stats.js', '(m.setVacation(true), true)')
+    await a.jump(5 * 86400e3)
+    check(await a.js('features/stats.js', 'm.currentStreak()') == 6, 'paused, not lost')
+    await a.js('features/stats.js', '(m.setVacation(false), true)')
+    check(await a.js('features/stats.js', 'm.currentStreak()') == 6, 'resumes after vacation')
+
+@test('Progress', 'invalid', 'No made-up story: “Share my morning” only appears once a real morning is proven')
+async def t_story_hidden(a):
+    pg = await a.open(seed={'fl:tasks': []})
+    await a.tab('progress')
+    check(not await a.visible('[data-ref=shareStory]'), 'hidden with nothing proven')
+    await a.fire_direct(test=False); await a.type_phrase(); await pg.click('#morning [data-ref=close]')
+    await a.tab('progress')
+    check(await a.visible('[data-ref=shareStory]'), 'shown after a proven morning')
+
+@test('Data', 'valid', 'Backup: encrypted export and restore round-trip; a wrong password is refused; no browser pop-ups')
+async def t_backup(a):
+    pg = await a.open(clock=False)
+    popups = []
+    pg.on('dialog', lambda d: (popups.append(d.message), asyncio.ensure_future(d.dismiss())))
+    r = await a.js('core/storage.js', """(async () => {
+      const prof = await import('./js/features/profile.js');
+      const file = await m.exportBackup('s3cret');
+      prof.set('name', 'Changed');
+      const bad = await m.importBackup(file, 'nope');
+      const good = await m.importBackup(file, 's3cret');
+      return { enc: m.isEncryptedBackup(file), bad: bad.ok, good: good.ok, name: JSON.parse(localStorage.getItem('fl:profile')).name };
+    })()""")
+    check(r['enc'] and not r['bad'] and r['good'] and r['name'] == 'Priya', f'round trip {r}')
+    await a.tab('settings', 'backup')
+    await pg.click('[data-ref=exportBackup]'); await pg.wait_for_timeout(150)
+    check(await pg.query_selector('.sheet input[type=password]'), 'password asked in the app’s own sheet')
+    check(not popups, f'no browser pop-ups: {popups}')
+
+@test('Sky', 'valid', 'The background follows time and weather: Noir stays black at night, Kerala rain shows over the screen, noon is lighter than night')
+async def t_sky_bg(a):
+    pg = await a.open(at=ms(ist(2026, 10, 14, 2)), seed={'fl:profile': {'name': 'P', 'onboarded': True, 'theme': 'noir'}})
+    top = await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sky-top').trim()")
+    check(top.lower() == '#000000', f'Noir night is true black: {top}')
+    await a.js('features/profile.js', "m.set('theme', 'midnight')"); await pg.wait_for_timeout(100)
+    night = await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sky-top').trim()")
+    await a.jump(10 * 3600e3)   # 12:00
+    noon = await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sky-top').trim()")
+    check(night != noon and await pg.evaluate("document.documentElement.dataset.skyPhase") == 'noon', f'changes with the time: {night} → {noon}')
+    await a.close()
+    b = App(a.browser)
+    pg2 = await b.open(seed=KERALA, at=ms(ist(2026, 10, 14, 7)))
+    await b.tick(1500)
+    check(await pg2.evaluate("document.documentElement.dataset.skyFx") == 'rain', 'rain over the whole screen in Kerala')
+    await b.close()
+
+@test('Sky', 'valid', 'Sunrise and sunset are worked out for the place (Kochi, Tokyo), not a fixed time')
+async def t_sun_times(a):
+    await a.open(clock=False)
+    r = await a.js('features/daylight.js', """(() => {
+      const f = (ms, tz) => new Date(ms).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+      const at = Date.UTC(2026, 9, 10, 6);
+      const k = m.sunTimes(at, 9.93, 76.27), t = m.sunTimes(at, 35.68, 139.65);
+      return [f(k.rise, 'Asia/Kolkata'), f(k.set, 'Asia/Kolkata'), f(t.rise, 'Asia/Tokyo'), f(t.set, 'Asia/Tokyo')];
+    })()""")
+    check(r == ['06:12', '18:10', '05:42', '17:13'], f'sun times {r}')
+
+@test('App', 'valid', 'No emoji anywhere on screen: icons and theme motifs instead')
+async def t_no_emoji(a):
+    pg = await a.open(seed=KERALA)
+    emoji = re.compile('[\U0001F300-\U0001FAFF☀-⛿✀-➿⭐]')
+    for tab in ['alarm', 'tasks', 'sounds', 'progress', 'settings']:
+        await a.tab(tab)
+        text = await pg.evaluate('document.body.innerText')
+        found = emoji.findall(text)
+        check(not found, f'emoji on {tab}: {found}')
+    await pg.click('#appbar [data-ref=menu]'); await pg.wait_for_timeout(150)
+    check(not emoji.findall(await pg.inner_text('.drawer')), 'none in the menu')
+    check(len(await pg.query_selector_all('.drawer .d-ico svg')) >= 9, 'menu uses line icons')
+
+@test('Android', 'valid', 'App lock: the Accessibility disclosure really opens the setting after “Agree”')
+async def t_native_disclosure(a):
+    pg = await a.open(native={}, clock=False)
+    await a.tab('settings', 'applock')
+    await pg.click('[data-group=applock] [data-ref=perm]'); await pg.wait_for_timeout(150)
+    check('Accessibility' in await pg.inner_text('.sheet'), 'disclosure shown first')
+    await pg.click('.sheet .btn.gold'); await pg.wait_for_timeout(150)
+    opened = [c['args'].get('which') for c in await first_light(a, 'openSettings')]
+    check('accessibility' in opened, f'setting opened: {opened}')
+
 
 # ---------- Layout
 @test('Layout', 'invalid', 'No screen scrolls sideways on a small 320 px phone (widest fonts, city themes)', timeout=180)

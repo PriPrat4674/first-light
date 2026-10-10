@@ -1,5 +1,5 @@
-// First-run setup: name → logo → colour → theme → font → style → sleep → (app) permissions → done.
-// Every choice applies instantly, so the setup screen restyles itself as you go.
+// First-run setup, kept short: name → theme → sleep → (app) permissions. Logo, colour, font and
+// style have good defaults and live in Look & feel. Every choice applies instantly.
 import { esc, refs, toast, vibrateTap } from '../core/util.js';
 import * as profile from '../features/profile.js';
 import * as sleep from '../features/sleep.js';
@@ -8,19 +8,13 @@ import * as native from '../services/native.js';
 import { picker, wirePickers } from './pickers.js';
 import { stepperRow, wireSteppers } from './components.js';
 import { petMarkup } from './pet-view.js';
-import { logoSVG } from './art.js';
-import { artColours } from './theme.js';
 import { SLEEP_GOAL_LIMITS } from '../config.js';
 import { goalNote } from './sleep-view.js';
 
-const STEPS = ['name', 'logo', 'accent', 'theme', 'font', 'style', 'sleep', ...(native.isNative() ? ['permissions'] : []), 'done'];
+const STEPS = ['name', 'theme', 'sleep', ...(native.isNative() ? ['permissions'] : [])];
 
 const TITLES = {
-  logo: ['Pick your logo', 'You’ll tap it every night 🌙'],
-  accent: ['Pick a colour', 'For buttons and the sunrise ☀️'],
-  theme: ['Pick a theme', 'Cities come with live weather 🌦️'],
-  font: ['Pick a font', 'How your clock looks ⏰'],
-  style: ['Pick a style', 'Round, fine or bold?']
+  theme: ['Pick a theme', 'Cities show their live weather.']
 };
 
 export function run() {
@@ -47,8 +41,8 @@ export function run() {
       if (step === 'name') {
         body = `
           <div class="ob-hero">${petMarkup('happy', 120)}</div>
-          <h1>Hi! I’m ${esc(p.petName)} 🐯</h1>
-          <p class="soft">I’ll get you up and keep you up. What’s your name?</p>
+          <h1>Hi, I’m ${esc(p.petName)}</h1>
+          <p class="soft">I’ll get you up. What’s your name?</p>
           <label class="field" style="margin-top:18px"><span>Your name</span><input type="text" data-ref="name" maxlength="24" autocomplete="given-name" value="${esc(p.name)}" placeholder="e.g. Priya"></label>
           ${nav('Next', { canSkip: true })}`;
       } else if (TITLES[step]) {
@@ -58,25 +52,18 @@ export function run() {
           ${nav()}`;
       } else if (step === 'sleep') {
         const sc = sleep.get().schedule;
-        body = `<h1>Your sleep</h1><p class="soft">I’ll nudge you at bedtime 🌙</p>
+        body = `<h1>Your sleep</h1><p class="soft">Your alarm starts at your wake-up time.</p>
           <div class="card" data-sleep>
             <label class="time-pick"><span class="label">I usually sleep at</span><span class="value small-time" data-ref="bedShow">${esc(sc.bed)}</span><input type="time" data-ref="bed" value="${sc.bed}"></label>
             <label class="time-pick" style="margin-top:8px"><span class="label">and wake at</span><span class="value small-time" data-ref="wakeShow">${esc(sc.wake)}</span><input type="time" data-ref="wake" value="${sc.wake}"></label>
             ${stepperRow({ key: 'goal', title: 'Sleep goal', value: sc.goal, min: SLEEP_GOAL_LIMITS[0], max: SLEEP_GOAL_LIMITS[1], step: 0.5, unit: ' h' })}
             <p class="small soft goal-note" data-ref="goalNote">${esc(goalNote(sc.goal))}</p>
           </div>
-          ${nav()}`;
+          ${nav(i === STEPS.length - 1 ? 'Let’s go' : 'Next')}`;
       } else if (step === 'permissions') {
-        body = `<h1>Let me ring when I’m closed 🔔</h1><p class="soft">Tap each one. I’ll wait.</p>
+        body = `<h1>Let me ring when I’m closed</h1><p class="soft">Tap each one.</p>
           <div class="card" data-ref="perms"><p class="muted italic">Checking…</p></div>
-          ${nav('Next', { canSkip: true })}`;
-      } else if (step === 'done') {
-        const c = artColours(p);
-        body = `<div class="ob-hero">${petMarkup('ecstatic', 140)}</div>
-          <h1>All set${p.name ? `, ${esc(p.name)}` : ''}! 🎉</h1>
-          <p class="soft">Alarm: ${esc(sleep.get().schedule.wake)}. Arm it tonight ☀️</p>
-          <div class="ob-icon">${logoSVG(p.logo, c, { size: 76 })}<span class="small muted">Your icon</span></div>
-          ${nav('Let’s go')}`;
+          ${nav('Let’s go', { canSkip: true })}`;
       }
       el.innerHTML = `<div class="ob-inner">${dots()}<div class="ob-step" data-step="${step}">${body}</div></div>`;
       wire(step);
@@ -124,7 +111,7 @@ export function run() {
       if (step === 'name' && dir > 0) profile.set('name', skipped ? '' : refs(el).name.value);
       if (step === 'sleep' && dir > 0) alarm.setTime(sleep.get().schedule.wake);
       vibrateTap();
-      if (step === 'done' && dir > 0) {
+      if (i === STEPS.length - 1 && dir > 0) {
         profile.set('onboarded', true);
         el.classList.add('leaving');
         setTimeout(() => { el.remove(); resolve(); }, 300);

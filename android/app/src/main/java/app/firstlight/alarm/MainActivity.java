@@ -40,8 +40,10 @@ public class MainActivity extends BridgeActivity {
         String kind = intent.getStringExtra(EXTRA_LAUNCH);
         String locked = intent.getStringExtra(EXTRA_LOCKED);
         // "Share → First Light": a link shared from another app.
-        String shared = Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())
-            ? intent.getStringExtra(Intent.EXTRA_TEXT) : null;
+        boolean isShare = Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType());
+        String shared = isShare ? intent.getStringExtra(Intent.EXTRA_TEXT) : null;
+        // Security: external send intents must never spoof internal alarm triggers
+        if (isShare) { kind = null; locked = null; }
         if (shared != null && shared.length() > MAX_SHARED) shared = shared.substring(0, MAX_SHARED);
         if (kind == null && locked == null && shared == null) return;
         JSONObject launch = new JSONObject();

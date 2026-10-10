@@ -13,7 +13,7 @@ export function mount(el) {
 
   function linkBlock(st) {
     return st.link
-      ? `<div class="linked"><span>${spotifyIcon(22)}</span><div class="grow"><strong>${esc(st.link.name)}</strong><span class="small muted">Shared ${esc(st.link.type)} · 30-second previews</span></div><button class="icon-btn" data-ref="unlink" aria-label="Remove shared ${esc(st.link.type)}">✕</button></div>
+      ? `<div class="linked"><span>${spotifyIcon(22)}</span><div class="grow"><strong>${esc(st.link.name)}</strong><span class="small muted">Shared ${esc(st.link.type)} · 30-second previews</span></div><button class="icon-btn" data-ref="unlink" aria-label="Remove shared ${esc(st.link.type)}"></button></div>
          <button class="btn spotify-btn" data-ref="open">${spotifyIcon(20)} PLAY ON SPOTIFY</button>`
       : `<p class="small soft" style="margin-top:12px">No Premium? In Spotify, tap <strong>Share → First Light</strong> on any playlist. Or paste the link:</p>
          <div class="paste-row"><input type="url" data-ref="link" placeholder="https://open.spotify.com/playlist/…" autocomplete="off" spellcheck="false" aria-label="Spotify link"><button class="btn line" data-ref="saveLink">Add</button></div>
@@ -40,7 +40,7 @@ export function mount(el) {
     if (r.saveLink) r.saveLink.onclick = () => {
       const res = spotify.setLink(r.link.value);
       if (!res.ok) { r.err.textContent = res.reason; r.err.classList.remove('hidden'); return; }
-      toast(`${res.name} added 🎵`);
+      toast(`${res.name} added`);
     };
     if (r.unlink) r.unlink.onclick = () => { spotify.clearLink(); toast('Removed.'); };
     if (r.open) r.open.onclick = () => native.openUrl(native.isNative() ? spotify.appUri() : spotify.webUrl());
@@ -59,7 +59,7 @@ export function mount(el) {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
       spotify.choosePlaylist(lists.find((p) => p.id === b.dataset.pick));
-      toast('Playlist chosen 🎵');
+      toast('Playlist chosen');
     };
     if (r.out) r.out.onclick = () => { spotify.disconnect(); lists = null; toast('Spotify disconnected.'); };
   }

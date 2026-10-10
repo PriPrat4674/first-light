@@ -28,6 +28,7 @@ import { sync as syncAwake } from './features/keep-awake.js';
 
 // Screens.
 import * as theme from './ui/theme.js';
+import * as skyBg from './ui/sky-bg.js';
 import * as tabs from './ui/tabs.js';
 import * as home from './ui/home.js';
 import * as install from './ui/install.js';
@@ -50,6 +51,7 @@ import * as shareView from './ui/share-view.js';
 import './features/places.js';
 
 theme.init();
+skyBg.init();
 document.documentElement.classList.toggle('in-app', native.isNative());
 
 if (!native.isNative() && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

@@ -1,4 +1,4 @@
-// The top bar: ☰ menu, the screen's name, and small live pills (e.g. "☕ Tea in 7:42").
+// The top bar: ☰ menu, the screen's name, and small live pills (e.g. "Tea · 7:42").
 // Other views put pills here with emit('pill:set', { key, text, onClick }) and emit('pill:clear', { key }).
 import { on } from '../core/events.js';
 import { esc, refs } from '../core/util.js';

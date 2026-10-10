@@ -29,12 +29,14 @@ First Light spreads the wake-up over **20–30 minutes**. A typed phrase stops t
 **Waking up**
 - ⏰ **Rings with the app closed** and the phone locked, using Android’s own alarm system (the one the Clock app uses). It shows over the lock screen and plays on the alarm volume, so silent mode doesn’t mute it.
 - ⌨️ **Type a phrase to stop it.** Letters light up as you type and mistakes turn red. Pasting is blocked.
-- 😴 **Limited snooze.** You get two by default, and every one goes in the Hall of Shame.
+- 😴 **Limited snooze.** You get two by default, and every one is marked on your calendar.
 - 👀 **“Still up?” check-in.** Five minutes later; miss it and the alarm comes back with your punishment song.
-- 📸 **Photo-proof tasks.** Live camera only, done in order, with optional waits between them, plus an optional random “chaos” task.
+- 📸 **Photo-proof tasks.** Live camera only, done in order, with optional waits between them, plus an optional random “chaos” task. The phone rejects a dark room or a covered lens.
+- 🚶 **Motion tasks.** “Walk 25 steps” and “Shake awake” count real movement from the accelerometer (a shake isn’t a step). No motion sensor? It asks for a photo instead.
+- 📳 **Shake to stop (optional).** After the phrase, 25 hard shakes. Off by default; switch it on in Alarm rules.
 - 🔒 **App lock.** Instagram and other apps you choose stay closed until your morning is proven. It unlocks by itself after 1–6 hours, and phone and messages are never locked.
 
-- 🚶 **Step away while you wait.** Leave the task list any time; a pill in the top bar counts down (“⏳ Tea is ready · 7:42”) and you get a notification when it’s time.
+- 🚶 **Step away while you wait.** Leave the task list any time; a pill in the top bar counts down (“Tea is ready · 7:42”) and you get a notification when it’s time.
 - 🧪 **Quick test.** A test alarm stops right after the phrase (“It works!”). “Try the full morning” runs tasks and check-in at 10× speed.
 
 **Music**
@@ -54,14 +56,19 @@ First Light spreads the wake-up over **20–30 minutes**. A typed phrase stops t
 
 **Made for you**
 - 🐯 **Pip, the grumpy streak tiger cub.** Six moods: ecstatic on a streak, grumpy when you snooze, sulky when the streak breaks, sleepy at bedtime. Pip leaps in on a curved path, lands and waves hello by name: when you open the app, after setup, when you come back after 30 minutes, and as a victory lap when you prove your morning.
-- 🌅 **A live sky** on the Alarm tab: first rays at dawn, full sun at noon, an orange glow at golden hour, moon and twinkling stars at night.
-- 🏙️ **City themes: New York, San Francisco, Kerala, Tokyo, Seoul.** Each has an original skyline drawing, its own palette, and a live card with the local time, weather (rain, fog, snow and clouds show in the sky), and an upbeat local headline or a “did you know”. No accounts or keys.
-- 🎨 **First-run setup.** Pick a logo (it changes your home-screen icon), colour, theme, font (8, including Techy, Kids’ favourite, Formal and Classic noir) and style: **3,456 combinations**, all readable.
+- 🌅 **A live sky behind every screen.** The background follows the time of day where your theme lives (dawn rose, noon blue, golden-hour amber, dusk violet, night) using real sunrise and sunset times, and stays readable in every theme. Noir stays true black at night.
+- 🏙️ **City themes: New York, San Francisco, Kerala, Tokyo, Seoul.** Each has an original skyline drawing, its own palette, and one line under the sky with the city’s time and live weather. Rain, fog, cloud and snow show across the whole screen. Tap it for an upbeat local headline and a “did you know”. No accounts or keys.
+- 🎨 **Quick first-run setup.** Name, theme and sleep (plus permissions in the app). Logo (it changes your home-screen icon), colour, font (8, including Techy, Kids’ favourite, Formal and Classic noir) and style live in Look & feel: **3,456 combinations**, all readable.
+- 🧣 **Pip’s wardrobe.** A mug, scarf, shades, crown and aura, drawn onto Pip’s artwork, unlocked at 7, 14, 30, 50 and 100-day streaks.
+- 🪔 **Theme icons, not emoji.** Clean line icons throughout, and each theme has its own motifs: a houseboat and oil lamp for Kerala, the torch and a cab for New York, a torii gate and sakura for Tokyo.
 - 🍔 **Short and sweet.** Four everyday tabs at the bottom; everything else in the ☰ menu. Longer explanations hide behind ⓘ.
-- 💬 Messages that change with your alarm time: *“Oho! We have an early riser tomorrow!! 🌅”*
+- 💬 Pip reacts when you change your alarm time: *“Oho! We have an early riser tomorrow!!”* Pip can also speak the alarm and your grade aloud.
 - 🔔 A choice of sounds for the alarm, check-ins and nudges.
 - 🔗 **Share → First Light** from Spotify, YouTube or Instagram adds the link where it fits.
-- 🔥 Streaks, a five-week calendar, grades for each morning, and history.
+- 🔥 Streaks, a five-week calendar (tap a day for its grade, time and snoozes), and a streak freeze that covers one missed day (earn more every 7 days). Vacation mode pauses the streak.
+- 📤 **Share my morning**: a story-sized image of a real proven morning in your theme.
+- 💾 **Backup & restore**, optionally encrypted with a password. In the app it opens Android’s share sheet (Drive, Files…).
+- 🧩 **Home-screen widget** (Android): your streak and next alarm.
 
 ## 📱 Screenshots
 

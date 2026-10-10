@@ -21,7 +21,7 @@ export function mount(root) {
       <div class="source-tiles" data-seg="source" role="group" aria-label="Wake-up music" data-ref="seg"></div>
       <div class="notice card warn hidden" data-ref="fallback" style="margin-top:12px"></div>
       <div data-ref="local" style="margin-top:12px">
-        <p class="small soft">A different song each morning 🎶 ${info('Your songs', 'Only the first 40 seconds loop while it rings. The rest plays as your reward once your morning is proven.')}</p>
+        <p class="small soft">A different song each morning. ${info('Your songs', 'Only the first 40 seconds loop while it rings. The rest plays as your reward once your morning is proven.')}</p>
         <ul class="list" data-ref="songList"></ul>
         <label class="btn line block" style="margin-top:10px">Add songs<input type="file" accept="audio/*" multiple data-ref="songInput" hidden></label>
       </div>
@@ -29,14 +29,17 @@ export function mount(root) {
       <div data-ref="youtube" style="margin-top:12px"></div>
     </div>
 
-    <div class="card">
-      <h3>Punishment song 😈 ${info('Punishment song', 'Plays if you miss the check-in. Pick one you can’t stand.')}</h3>
+    <p class="label-line extras-label">Extras</p>
+    <details class="card fold">
+      <summary><span class="grow"><strong>Punishment song</strong><span class="small muted" data-ref="punishSum"></span></span></summary>
+      <p class="small soft">Plays if you miss the check-in. Pick one you can’t stand.</p>
       <ul class="list" data-ref="punish"></ul>
       <label class="btn line block" style="margin-top:10px">Choose a song<input type="file" accept="audio/*" data-ref="punishInput" hidden></label>
-    </div>
+    </details>
 
-    <div class="card">
-      <h3>Wake-up boost 🚀 ${info('Wake-up boost', 'After you pass the check-in: your voice note from last night, then a clip.')}</h3>
+    <details class="card fold">
+      <summary><span class="grow"><strong>Wake-up boost</strong><span class="small muted" data-ref="boostSum"></span></span></summary>
+      <p class="small soft">After the check-in: your voice note, then a clip.</p>
       <div class="row between wrap" style="margin-top:10px"><strong>Note from past you</strong><span class="small muted" data-ref="voiceMeta"></span></div>
       <div class="row wrap" style="margin-top:10px">
         <button class="btn gold" data-ref="rec">Record</button>
@@ -49,7 +52,7 @@ export function mount(root) {
       <ul class="list" data-ref="clips"></ul>
       <div class="paste-row"><input type="url" data-ref="clipLink" placeholder="Paste a YouTube or Instagram link" autocomplete="off" spellcheck="false" aria-label="Clip link"><button class="btn line" data-ref="addLink">Add</button></div>
       <label class="btn quiet" style="margin-top:6px">Or add a video from your phone<input type="file" accept="video/*" multiple data-ref="clipInput" hidden></label>
-    </div>`;
+    </details>`;
   const r = refs(root);
   spotifyPanel.mount(r.spotify);
   youtubePanel.mount(r.youtube);
@@ -79,6 +82,7 @@ export function mount(root) {
     r.punish.innerHTML = p
       ? `<li><div class="grow"><strong>${esc(p.name)}</strong><span class="small muted">${mb(p.blob)}</span></div><button class="icon-btn" data-delpunish aria-label="Remove punishment song">${ICONS.x}</button></li>`
       : '<li class="empty">None yet. A missed check-in beeps.</li>';
+    r.punishSum.textContent = p ? p.name : 'Off';
   }
 
   async function renderBoost() {
@@ -88,6 +92,8 @@ export function mount(root) {
     r.playVoice.classList.toggle('hidden', !v);
     r.delVoice.classList.toggle('hidden', !v);
     r.rec.textContent = v ? 'Record again' : 'Record';
+    const n = c.length + links.length;
+    r.boostSum.textContent = [v ? 'Voice note' : '', n ? `${n} clip${n === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'Off';
     r.clips.innerHTML = c.length || links.length
       ? c.map((m) => `<li><div class="grow"><strong>${esc(m.name)}</strong><span class="small muted">${mb(m.blob)}</span></div><button class="icon-btn" data-delclip="${m.id}" aria-label="Remove ${esc(m.name)}">${ICONS.x}</button></li>`).join('')
         + links.map((l) => `<li><span>${l.site === 'youtube' ? youtubeIcon(18) : instagramIcon(18)}</span><div class="grow"><strong>${esc(l.name)}</strong><span class="small muted">${esc(l.url.replace(/^https:\/\/(www\.)?/, ''))}</span></div><button class="icon-btn" data-dellink="${l.id}" aria-label="Remove ${esc(l.name)}">${ICONS.x}</button></li>`).join('')
@@ -120,7 +126,7 @@ export function mount(root) {
     const res = boost.addLink(r.clipLink.value);
     if (!res.ok) { toast(res.reason, 4000); return; }
     r.clipLink.value = '';
-    toast('Clip saved 🚀');
+    toast('Clip saved');
   };
 
   /* Voice note recorder (max 30 s) */
@@ -142,7 +148,7 @@ export function mount(root) {
       };
       rec.start();
       r.rec.textContent = 'Stop recording';
-      r.voiceMeta.textContent = 'Recording… tell tomorrow-you why it matters 🎙️';
+      r.voiceMeta.textContent = 'Recording… tell tomorrow-you why it matters';
       stopTimer = setTimeout(() => rec?.state === 'recording' && rec.stop(), 30_000);
     } catch { toast('Microphone blocked. Allow it in your browser settings.'); }
   };

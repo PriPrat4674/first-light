@@ -8,43 +8,58 @@ import { petLine, greeting } from '../features/messages.js';
 import { petSVG } from './art.js';
 import { artColours } from './theme.js';
 import { PIP_ART } from '../config.js';
+import * as audio from '../services/audio.js';
+import * as wardrobe from '../features/wardrobe.js';
+import { accessoryLayers } from './wardrobe-art.js';
 
 // Pip is drawn in code until real artwork is added to www/img/pip/ (see PIP_ART in config.js).
 export const hasArt = (pose) => PIP_ART.includes(pose);
 export const artSrc = (pose) => `img/pip/${pose}.webp`;
-const artImg = (pose, size, cls = '') => `<img class="pet pet-img pet-${pose}${cls}" src="${artSrc(pose)}" width="${size}" height="${size}" alt="${esc(profile.get().petName)}" draggable="false" decoding="async">`;
+// With an accessory on, the image and its layers share one wrapper, so they animate together.
+function artImg(pose, size, cls = '', label = '') {
+  const name = esc(profile.get().petName);
+  const { back, front } = accessoryLayers(pose, wardrobe.wearing());
+  if (!back && !front) return `<img class="pet pet-img pet-${pose}${cls}" src="${artSrc(pose)}" width="${size}" height="${size}" ${label ? `aria-label="${esc(label)}" ` : ''}alt="${name}" draggable="false" decoding="async">`;
+  return `<span class="pet pet-art pet-${pose}${cls}" style="width:${size}px;height:${size}px" role="img" aria-label="${esc(label || name)}">${back}<img src="${artSrc(pose)}" width="${size}" height="${size}" alt="" draggable="false" decoding="async">${front}</span>`;
+}
 export const petMarkup = (mood, size = 96) => hasArt(mood)
-  ? artImg(mood, size).replace('alt="', `aria-label="${esc(profile.get().petName)} looks ${mood}" alt="`)
-  : petSVG(mood, artColours(), { size, label: `${profile.get().petName} looks ${mood}` });
+  ? artImg(mood, size, '', `${profile.get().petName} looks ${mood}`)
+  : petSVG(mood, artColours(), { size, label: `${profile.get().petName} looks ${mood}`, accessory: wardrobe.wearing() });
 
 export function mountCard(el) {
   el.classList.add('card', 'pet-card');
-  let poke = 0;
+  let poke = 0, said = null;
   function render() {
     const mood = pet.current();
     const p = profile.get();
-    const line = poke ? pokeLine(mood, poke) : petLine(mood, { streak: stats.currentStreak(), name: p.name });
+    const line = poke ? pokeLine(mood, poke) : said || petLine(mood, { streak: stats.currentStreak(), name: p.name });
     el.innerHTML = `
-      <button class="pet-hit" data-ref="hit" aria-label="Poke ${esc(p.petName)}">${petMarkup(mood, 88)}</button>
+      <button class="pet-hit" data-ref="hit" aria-label="Poke ${esc(p.petName)}">${petMarkup(mood, 68)}</button>
       <div class="bubble" aria-live="polite"><strong>${esc(p.petName)}</strong><p>${esc(line)}</p></div>`;
     refs(el).hit.onclick = () => {
       poke++;
-      vibrateTap(15);
+      vibrateTap(20);
+      const snd = mood === 'grumpy' || mood === 'sulking' ? 'grump'
+        : mood === 'sleepy' ? 'sleepy'
+        : ['roar', 'purr', 'chirp', 'roar'][(poke - 1) % 4];
+      audio.playTigerSound(snd);
       render();
       const svg = el.querySelector('.pet');
       svg?.classList.add('boing');
     };
   }
+  // Something Pip wants to say right now (e.g. about a new wake-up time), until he's poked or you leave.
+  on('pet:say', ({ text }) => { said = text; poke = 0; render(); });
   on('pet:changed', render);
   on('profile:changed', render);
-  on('tab:shown', ({ tab }) => { if (tab === 'alarm') { poke = 0; render(); } });
+  on('tab:shown', ({ tab }) => { if (tab === 'alarm') { poke = 0; said = null; render(); } });
   render();
 }
 
 function pokeLine(mood, n) {
-  const lines = mood === 'grumpy' ? ['Don’t poke me, I’m sulking 😤', 'Still grumpy. Prove a morning and we’ll talk 🙄', 'Hmph 😒']
-    : mood === 'sleepy' ? ['Five more minutes… 😴', 'Shh, it’s nap o’clock 🥱', 'Zzz… huh? Oh, hi 🌙']
-    : ['Rawr! 🐯', 'That tickles 🤭', 'Again? Okay, one tiny roar 🎶', 'I like you too 💛'];
+  const lines = mood === 'grumpy' ? ['Don’t poke me.', 'Still grumpy.', 'Hmph.']
+    : mood === 'sleepy' ? ['Five more minutes…', 'Shh. Nap o’clock.', 'Zzz… oh, hi.']
+    : ['Rawr!', 'That tickles.', 'One tiny roar.', 'I like you too.'];
   return lines[(n - 1) % lines.length];
 }
 
@@ -57,7 +72,7 @@ export function greet({ afterSetup = false, victory = false, text = null } = {})
   if (flying) return flying;
   const p = profile.get();
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const line = text || (victory ? `Morning proven${p.name ? `, ${p.name}` : ''}! 🎉` : afterSetup ? `Welcome home${p.name ? `, ${p.name}` : ''}! 👋` : greeting(p.name));
+  const line = text || (victory ? `Morning proven${p.name ? `, ${p.name}` : ''}!` : afterSetup ? `Welcome home${p.name ? `, ${p.name}` : ''}!` : greeting(p.name));
   const size = 120;
   flying = new Promise((resolve) => {
     const el = document.createElement('div');

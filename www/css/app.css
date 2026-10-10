@@ -601,3 +601,124 @@ img.pet { display: block; object-fit: contain; filter: drop-shadow(0 4px 10px rg
 img.pet.waving { animation: wiggle .9s ease-in-out 2; transform-origin: 50% 90%; }
 @keyframes wiggle { 25% { transform: rotate(-4deg) } 75% { transform: rotate(4deg) } }
 .sleep-cub { float: right; margin: -6px -4px 0 8px; }
+
+/* ---------- Pip's wardrobe: accessories drawn over the artwork ---------- */
+.pet-art { display: block; position: relative; flex: none; user-select: none; }
+.pet-art > img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .22)); -webkit-user-drag: none; }
+.pet-acc { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; }
+.pet-acc-aura { inset: -8%; width: 116%; height: 116%; z-index: 0; animation: auraSpin 24s linear infinite; }
+.pet-acc-mug .steam { animation: floaty 3s ease-in-out infinite; }
+.pet-art.waving { animation: wiggle .9s ease-in-out 2; transform-origin: 50% 90%; }
+.pet-art.flip { transform: scaleX(-1); }
+@keyframes auraSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pet-acc-aura, .pet-acc-mug .steam { animation: none; } }
+
+.wardrobe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.wardrobe button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; min-height: 84px; border-radius: var(--r); border: var(--bw) solid var(--hair-2); background: var(--surface); color: var(--text); font-size: .9rem; }
+.wardrobe button[aria-pressed=true] { border-color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.wardrobe button:disabled { opacity: .5; }
+.wardrobe small { color: var(--muted); font-size: .75rem; }
+
+/* Motion counting (shake to stop, motion tasks) */
+.motion-count { font-family: var(--display); font-size: 2.6rem; line-height: 1.1; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.motion-count small { font-size: 1rem; color: var(--text-2); font-family: var(--body); }
+.meter { height: 6px; border-radius: 3px; background: var(--hair-2); overflow: hidden; margin-top: 8px; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
+
+/* ---------- Alarm tab, decluttered ---------- */
+.home-hero .clock { font-size: clamp(4rem, 21vw, 6rem); margin-top: 2px; }
+.home-hero .clock small { font-size: .3em; margin-left: .15em; color: var(--text-2); letter-spacing: 0; }
+.home-hero .burst-wrap { max-width: 400px; margin-top: 0; }
+.home-hero .burst-wrap .scene { max-height: 30vh; }
+.place-line { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 8px auto 0; padding: 6px 14px; min-height: 40px; border: 1px solid var(--hair-2); border-radius: 999px; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--text); font-size: .98rem; }
+.place-line .wx { display: inline-flex; align-items: center; gap: 6px; }
+.place-line .chev, .row-link .chev { color: var(--muted); font-size: 1.2rem; line-height: 1; }
+.alarm-card { margin-top: 12px; }
+.alarm-card .arm-status { margin-top: 10px; }
+.alarm-card .slide { margin-top: 10px; }
+.pet-card { padding: 12px 14px; }
+.rows { padding: 4px 16px; }
+.row-link, .row-line { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 8px 0; border: 0; background: none; color: var(--text); text-align: left; font-size: 1.02rem; }
+.rows > * + * , .sleep-rows > * + * { border-top: 1px solid var(--hair); }
+.row-link .muted { font-size: .95rem; }
+.row-note { margin: -6px 0 8px 34px; font-size: .9rem; color: var(--muted); border-top: 0 !important; }
+.row-note.short { color: var(--danger); }
+.btn.small { min-height: 38px; padding: 6px 14px; font-size: .95rem; }
+.home-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.ico { flex: none; color: var(--accent-text); }
+.wx-ico { color: var(--text-2); }
+.sheet-line { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
+.sheet-line .ico { margin-top: 2px; }
+.grow { flex: 1; min-width: 0; }
+.sheet-body { color: var(--text-2); }
+
+/* Tasks tab */
+.add-task { margin-top: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; }
+.chip .ico { color: var(--accent-text); }
+.task-head .title span .ico { vertical-align: -3px; margin-right: 6px; }
+.empty-card .soft { margin: 0; }
+
+/* Collapsible extras (Music tab) */
+.extras-label { margin-top: 22px; }
+.fold { padding: 0 18px; }
+.fold > summary { list-style: none; display: flex; align-items: center; gap: 12px; min-height: 60px; cursor: pointer; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: '›'; color: var(--muted); font-size: 1.3rem; transition: transform .2s ease; }
+.fold[open] > summary::after { transform: rotate(90deg); }
+.fold > summary .grow { display: flex; flex-direction: column; }
+.fold[open] { padding-bottom: 18px; }
+
+/* Progress tab */
+.stat-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.stat-grid.three .stat b { font-size: 1.6rem; }
+.cal .day { background: none; padding: 0; position: relative; }
+.cal .day.frozen { border-style: dashed; border-color: var(--accent-line); color: var(--accent-text); }
+.cal .day.snoozed::after, .legend .dot-snooze { content: ''; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--danger); }
+.legend .dot-snooze { position: static; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; }
+.legend { flex-wrap: wrap; }
+.day-facts { list-style: none; margin: 8px 0 0; padding: 0; }
+.day-facts li { padding: 6px 0; border-top: 1px solid var(--hair); color: var(--text); }
+.day-facts li:first-child { border-top: 0; }
+.empty-card { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 26px 18px; }
+.empty-card .motif { color: var(--text-2); }
+.streak-hero .btn .ico { color: inherit; }
+
+/* Menu */
+.drawer-sec { margin: 16px 10px 2px; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.drawer-list { margin-top: 0; }
+.drawer-list button { min-height: 46px; }
+.d-ico { display: grid; place-items: center; }
+.stamp { font-size: 0; }
+.stamp .motif { display: block; color: var(--accent-text); background: var(--surface); border-radius: 50%; padding: 4px; box-shadow: 0 0 0 1px var(--accent-line); }
+
+/* ---------- The sky behind everything (ui/sky-bg.js) ---------- */
+html.sky-on body { background: transparent; }
+#sky-bg { position: fixed; inset: 0; z-index: -1; background: var(--sky-bg, var(--bg)); transition: background 1.2s ease; pointer-events: none; overflow: hidden; }
+.sky-on .card, .sky-on .task-card, .sky-on .stat { background: color-mix(in srgb, var(--surface) 90%, transparent); }
+.sky-on[data-style="soft"] .card, .sky-on[data-style="soft"] .task-card, .sky-on[data-style="soft"] .stat { background: color-mix(in srgb, var(--surface-2) 90%, transparent); }
+.sky-on .appbar { background: color-mix(in srgb, var(--sky-top, var(--bg)) 90%, transparent); }
+.sky-on nav.tabs { background: color-mix(in srgb, var(--sky-low, var(--bg)) 94%, transparent); }
+.sky-on #morning, .sky-on #onboarding { background: var(--sky-bg, var(--bg)); }
+
+/* Weather, drawn softly over the top of the screen and fading out lower down. */
+.sky-fx { position: absolute; inset: 0 0 auto; height: 60vh; opacity: 0; transition: opacity 1s ease; -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, transparent 100%); }
+[data-sky-fx] .sky-fx { opacity: 1; }
+[data-sky-fx="rain"] .sky-fx, [data-sky-fx="storm"] .sky-fx {
+  background-image: repeating-linear-gradient(104deg, transparent 0 26px, color-mix(in srgb, var(--text) 16%, transparent) 26px 27px, transparent 27px 61px);
+  background-size: 100% 140px; animation: skyRain .55s linear infinite; }
+[data-sky-fx="storm"] .sky-fx::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 30%, transparent); opacity: 0; animation: skyFlash 9s linear infinite; }
+[data-sky-fx="snow"] .sky-fx {
+  background-image: radial-gradient(2px 2px at 20px 30px, color-mix(in srgb, var(--text) 55%, transparent) 50%, transparent 51%), radial-gradient(1.6px 1.6px at 80px 90px, color-mix(in srgb, var(--text) 45%, transparent) 50%, transparent 51%), radial-gradient(2.4px 2.4px at 130px 50px, color-mix(in srgb, var(--text) 50%, transparent) 50%, transparent 51%);
+  background-size: 160px 140px; animation: skySnow 9s linear infinite; }
+[data-sky-fx="fog"] .sky-fx {
+  background: linear-gradient(180deg, transparent 18%, color-mix(in srgb, var(--text) 9%, transparent) 30%, transparent 42%, color-mix(in srgb, var(--text) 8%, transparent) 58%, transparent 72%);
+  background-size: 200% 100%; animation: skyFog 30s ease-in-out infinite alternate; }
+[data-sky-fx="cloud"] .sky-fx {
+  background: radial-gradient(40% 14% at 22% 18%, color-mix(in srgb, var(--text) 10%, transparent), transparent 70%), radial-gradient(34% 12% at 78% 30%, color-mix(in srgb, var(--text) 8%, transparent), transparent 70%);
+  background-size: 140% 100%; animation: skyFog 60s ease-in-out infinite alternate; }
+@keyframes skyRain { to { background-position: -38px 140px; } }
+@keyframes skySnow { to { background-position: 30px 140px; } }
+@keyframes skyFog { to { background-position: 100% 0; } }
+@keyframes skyFlash { 0%, 91%, 93%, 95%, 100% { opacity: 0; } 92%, 94% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sky-fx, .sky-fx::after { animation: none !important; } }

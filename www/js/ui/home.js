@@ -1,7 +1,7 @@
-// Alarm tab: clock, wake-up time, slide to arm, tomorrow's tasks.
+// Alarm tab: the sky and clock, then the one thing you come here for (wake time + slide to arm),
+// then Pip and two quiet rows (sleep, tomorrow's tasks). Everything else is a tap away.
 import { on, emit } from '../core/events.js';
-import { refs, esc, fmtTime, fmtDur, toast, vibrateTap } from '../core/util.js';
-import { APP_NAME } from '../config.js';
+import { refs, esc, fmtTime, fmtDur, toast, vibrateTap, plural } from '../core/util.js';
 import * as alarm from '../features/alarm.js';
 import * as tasks from '../features/tasks.js';
 import * as guard from '../features/battery-guard.js';
@@ -11,16 +11,18 @@ import * as battery from '../services/battery.js';
 import * as audio from '../services/audio.js';
 import { requestPermission } from '../services/notify.js';
 import { sheet, ICONS } from './components.js';
-import { scene, DEFAULT_SUN, skyState } from './scene.js';
+import { scene, skyState } from './scene.js';
+import { skyNow } from '../features/daylight.js';
 import * as places from '../features/places.js';
 import * as tabs from './tabs.js';
 import * as native from '../services/native.js';
-import * as profile from '../features/profile.js';
-import * as stats from '../features/stats.js';
-import { alarmMessage } from '../features/messages.js';
 import * as petView from './pet-view.js';
+import * as stats from '../features/stats.js';
+import * as profile from '../features/profile.js';
+import { alarmMessage } from '../features/messages.js';
 import * as sleepView from './sleep-view.js';
 import * as recoveryView from './recovery-view.js';
+import { icon, weatherIcon } from './icons.js';
 
 const inApp = native.isNative();
 
@@ -38,8 +40,8 @@ export function mount(root) {
       <div class="clock" data-ref="clock">--:--</div>
       <div class="date" data-ref="date"></div>
       <div class="burst-wrap" data-ref="burst"></div>
+      <button class="place-line hidden" data-ref="place" aria-haspopup="dialog"></button>
     </section>
-    <div class="card city-card hidden" data-ref="city"></div>
 
     <div class="card alarm-card">
       <label class="time-pick">
@@ -47,81 +49,69 @@ export function mount(root) {
         <span class="value" data-ref="timeShow"></span>
         <input type="time" data-ref="time" aria-label="Wake-up time" required>
       </label>
-      <p class="alarm-msg" data-ref="msg"></p>
       <p class="arm-status" data-ref="status" aria-live="polite"></p>
-
       <div class="slide" data-ref="slide">
         <div class="fill" data-ref="fill"></div>
         <div class="text">Slide to arm</div>
         <button class="thumb" data-ref="thumb" aria-label="Arm alarm. Press Enter, or slide right.">${ICONS.sun}</button>
       </div>
-
       <div class="armed-box hidden" data-ref="armedBox">
         ${inApp ? '' : '<button class="btn gold" data-ref="night">Night screen</button>'}
         <button class="btn line" data-ref="disarm">Disarm</button>
-      </div>
-
-      <div class="row between wrap" style="margin-top:10px">
-        <button class="btn quiet" data-ref="test">Try a test alarm</button>
-        <span class="battery-pill hidden" data-ref="batt"></span>
       </div>
     </div>
 
     <div class="card notice warn hidden" data-ref="permWarn"></div>
     <div data-ref="pet"></div>
     <div class="hidden" data-ref="recovery"></div>
-    <div data-ref="sleep"></div>
-
-    <div class="card">
-      <div class="card-head"><h3>Tomorrow’s ritual</h3><button class="btn quiet" data-ref="edit">Edit</button></div>
-      <ol class="ritual" data-ref="ritual"></ol>
+    <div class="card rows">
+      <div data-ref="sleep"></div>
+      <button class="row-link" data-ref="edit">${icon('check')}<span class="grow">Tomorrow</span><span class="muted" data-ref="ritual"></span><span class="chev" aria-hidden="true">›</span></button>
+    </div>
+    <div class="home-foot">
+      <button class="btn quiet" data-ref="test">Try a test alarm</button>
+      <span class="battery-pill hidden" data-ref="batt"></span>
     </div>`;
   const r = refs(root);
 
   /* ----- status ----- */
   function statusText(now) {
     const a = alarm.status();
-    if (a.testAt) return `Test alarm in ${fmtDur(a.testAt - now)} ⏳`;
+    if (a.testAt) return `Test alarm in ${fmtDur(a.testAt - now)}`;
     if (a.armedAt) return `Armed · rings in ${fmtDur(a.armedAt - now)}`;
-    return inApp ? 'Not armed yet. Slide before bed.' : 'Not armed yet. Slide, then leave me open.';
+    return inApp ? 'Not armed. Slide before bed.' : 'Not armed. Slide, then leave me open.';
   }
 
-  /* ----- sky + city ----- */
+  /* ----- sky + place ----- */
   let skyKey = '', lastMinute = -1;
   function paintSky(now = Date.now(), force = false) {
-    const city = places.info(now);
-    let mins, rise = DEFAULT_SUN.rise, set = DEFAULT_SUN.set;
-    if (city) {
-      mins = places.minutesIn(city.tz, now);
-      if (city.weather?.sunrise && city.weather?.sunset) { rise = places.minutesIn(city.tz, city.weather.sunrise); set = places.minutesIn(city.tz, city.weather.sunset); }
-    } else {
-      const d = new Date(now); mins = d.getHours() * 60 + d.getMinutes();
-    }
+    const { mins, rise, set, city, fx } = skyNow(now);
     const st = skyState(mins, rise, set);
-    const fx = city?.weather?.fx || null;
     const key = `${st.phase}|${Math.round(st.lit * 12)}|${Math.round(st.alt * 12)}|${city?.id || ''}|${fx}`;
     if (!force && key === skyKey) return;
     skyKey = key;
     r.burst.innerHTML = scene({ mins, rise, set, city: city?.id || null, fx, seed: 7, label: `${st.label}${city ? ` in ${city.name}` : ''}` });
   }
 
-  let showFact = null;
-  function paintCity() {
+  // One line under the sky for city themes: the city's time and weather. Tap for today's fact and headline.
+  function paintPlace() {
     const c = places.info();
-    r.city.classList.toggle('hidden', !c);
+    r.place.classList.toggle('hidden', !c);
     if (!c) return;
-    const first = showFact === null ? (c.headlineFirst && c.news ? 'news' : 'fact') : showFact ? 'fact' : 'news';
-    const useNews = first === 'news' && c.news;
-    const line = useNews
-      ? `<span aria-hidden="true">📰</span><button class="link-btn" data-open="${esc(c.news.url)}">${esc(c.news.title)}</button>`
-      : `<span aria-hidden="true">💡</span><span>${esc(c.fact.text)}${c.fact.url ? ` <button class="link-btn small" data-open="${esc(c.fact.url)}">Wikipedia</button>` : ''}</span>`;
-    r.city.innerHTML = `
-      <div class="city-top"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.time)}</span>${c.weather ? `<span class="wx">${c.weather.emoji} ${c.weather.temp}° ${esc(c.weather.label)}</span>` : ''}</div>
-      <p class="city-line">${line}${c.news ? `<button class="icon-btn swap" data-ref="swap" aria-label="${useNews ? 'Show a fun fact' : 'Show the headline'}">↻</button>` : ''}</p>`;
-    const sw = r.city.querySelector('[data-ref="swap"]');
-    if (sw) sw.onclick = () => { showFact = !!useNews; paintCity(); };
+    const w = c.weather;
+    r.place.innerHTML = `<span class="place-name">${esc(c.name)} <span class="muted">${esc(c.time)}</span></span>${w ? `<span class="wx">${weatherIcon(w.kind, w.isDay, 20)}${w.temp}° ${esc(w.label)}</span>` : ''}<span class="chev" aria-hidden="true">›</span>`;
+    r.place.setAttribute('aria-label', `${c.name}, ${c.time}${w ? `, ${w.temp} degrees, ${w.label}` : ''}. More about ${c.name}`);
   }
-  r.city.addEventListener('click', (e) => { const b = e.target.closest('[data-open]'); if (b) native.openUrl(b.dataset.open); });
+  r.place.onclick = async () => {
+    const c = places.info();
+    if (!c) return;
+    const parts = [];
+    if (c.news) parts.push(`<p class="sheet-line">${icon('news', 18)}<span>${esc(c.news.title)} <button class="link-btn" data-open="${esc(c.news.url)}">Read</button></span></p>`);
+    parts.push(`<p class="sheet-line">${icon('bulb', 18)}<span>${esc(c.fact.text)}${c.fact.url ? ` <button class="link-btn" data-open="${esc(c.fact.url)}">Wikipedia</button>` : ''}</span></p>`);
+    const done = sheet({ title: c.name, body: parts.join(''), actions: [{ label: 'Close', value: true }] });
+    document.querySelector('.sheet')?.addEventListener('click', (e) => { const b = e.target.closest('[data-open]'); if (b) native.openUrl(b.dataset.open); });
+    await done;
+  };
 
   function render() {
     const a = alarm.status();
@@ -131,7 +121,6 @@ export function mount(root) {
     r.slide.classList.toggle('hidden', a.armed);
     r.armedBox.classList.toggle('hidden', !a.armed);
     r.status.textContent = statusText(Date.now());
-    r.msg.textContent = alarmMessage(a.time, { date: new Date(a.armedAt || Date.now() + 12 * 3600_000), streak: stats.currentStreak(), name: profile.get().name });
   }
 
   async function renderPerms() {
@@ -141,7 +130,7 @@ export function mount(root) {
     r.permWarn.classList.toggle('hidden', !missing.length);
     if (!missing.length) return;
     const names = { notifications: 'notifications', exactAlarm: 'exact alarms', fullScreen: 'full-screen alarms' };
-    r.permWarn.innerHTML = `<h3>Let me ring when I’m closed 🔔</h3><p class="small soft" style="margin-top:4px">Allow ${missing.map((m) => names[m]).join(', ')}.</p><button class="btn gold" data-fix="${missing[0]}" style="margin-top:10px">Fix now</button>`;
+    r.permWarn.innerHTML = `<h3>Let me ring when I’m closed</h3><p class="small soft" style="margin-top:4px">Allow ${missing.map((m) => names[m]).join(', ')}.</p><button class="btn gold" data-fix="${missing[0]}" style="margin-top:10px">Fix now</button>`;
     r.permWarn.querySelector('[data-fix]').onclick = async (e) => {
       const which = e.target.dataset.fix;
       if (which === 'notifications') { const res = await native.requestNotifications(); if (!res.granted) native.openSettings('notifications'); }
@@ -150,20 +139,16 @@ export function mount(root) {
   }
 
   function renderRitual() {
-    const list = tasks.all();
-    const chaos = tasks.options().chaos;
-    r.ritual.innerHTML = list.length
-      ? list.map((t, i) => `<li><span class="n">${i + 1}</span><span>${esc(t.name)}</span>${t.gapMin ? `<span class="gap">${t.gapMin} min wait</span>` : ''}</li>`).join('')
-        + (chaos ? `<li class="chaos"><span class="n">${list.length + 1}</span><span class="italic">A surprise chaos task</span></li>` : '')
-      : '<li class="muted italic">No tasks yet. Typing the phrase ends it.</li>';
+    const n = tasks.all().length + (tasks.options().chaos ? 1 : 0);
+    r.ritual.textContent = n ? plural(n, 'task') : 'Just the phrase';
   }
 
+  // Only worth a word when it's a problem.
   function renderBattery(b = battery.get()) {
-    if (!b.supported || inApp) { r.batt.classList.add('hidden'); return; }
-    const low = !b.charging && b.level <= guard.settings().armBelow;
-    r.batt.classList.remove('hidden');
+    const low = b.supported && !inApp && !b.charging && b.level <= guard.settings().armBelow;
+    r.batt.classList.toggle('hidden', !low);
+    if (low) r.batt.innerHTML = `${ICONS.battery(b.level, false)}${b.level}%`;
     r.batt.classList.toggle('low', low);
-    r.batt.innerHTML = `${ICONS.battery(b.level, b.charging)}${b.level}%${b.charging ? ' charging' : ''}`;
   }
 
   /* ----- arming ----- */
@@ -173,17 +158,17 @@ export function mount(root) {
     const check = guard.armCheck();
     if (!check.ok) {
       const choice = await sheet({
-        title: `Battery at ${check.level}% 🔋`,
-        body: `Not charging. If it drops to ${check.floor}%, I’ll switch the alarm off to save your phone.`,
+        title: `Battery at ${check.level}%`,
+        body: `Not charging. At ${check.floor}% I’ll switch the alarm off to save your phone.`,
         actions: [{ label: 'I’ll plug in first', value: 'cancel', style: 'gold' }, { label: 'Arm anyway', value: 'arm' }]
       });
       if (choice !== 'arm') { resetSlide(); return; }
     }
     alarm.arm();
     vibrateTap(30);
-    if (inApp) { toast(`Armed for ${fmtTime(new Date(alarm.status().armedAt))} ⏰ Sleep well!`); renderPerms(); return; }
+    if (inApp) { toast(`Armed for ${fmtTime(new Date(alarm.status().armedAt))}. Sleep well.`); renderPerms(); return; }
     requestPermission();
-    if (check.unknown) toast('This browser can’t read your battery. Plug in to be safe.', 4000);
+    if (check.unknown) toast('Can’t read the battery here. Plug in to be safe.', 4000);
     else toast(`Armed for ${fmtTime(new Date(alarm.status().armedAt))}.`);
   }
 
@@ -215,24 +200,28 @@ export function mount(root) {
   /* ----- other controls ----- */
   r.disarm.onclick = () => { alarm.disarm(); toast('Alarm disarmed.'); };
   if (r.night) r.night.onclick = () => emit('night:open');
-  r.test.onclick = () => { audio.unlock(); if (music.status().source === 'spotify') spotify.prepare(); alarm.test(); toast('Test alarm in 10 seconds ⏳'); };
-  r.time.addEventListener('change', (e) => { if (!e.target.value || !alarm.setTime(e.target.value)) render(); });
+  r.test.onclick = () => { audio.unlock(); if (music.status().source === 'spotify') spotify.prepare(); alarm.test(); toast('Test alarm in 10 seconds.'); };
+  r.time.addEventListener('change', (e) => {
+    if (!e.target.value || !alarm.setTime(e.target.value)) { render(); return; }
+    emit('pet:say', { text: alarmMessage(e.target.value, { streak: stats.currentStreak(), name: profile.get().name }) });
+  });
   r.edit.onclick = () => tabs.show('tasks');
 
   on('alarm:changed', render);
   on('tasks:changed', renderRitual);
   on('battery:changed', renderBattery);
   on('tab:shown', ({ tab }) => { if (tab === root.dataset.tab) { render(); renderRitual(); renderPerms(); } });
-  on('profile:changed', render);
-  on('streak:changed', render);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') renderPerms(); });
-  on('place:changed', () => { paintCity(); paintSky(Date.now(), true); });
-  on('profile:changed', () => { paintCity(); paintSky(Date.now(), true); });
+  on('place:changed', () => { paintPlace(); paintSky(Date.now(), true); });
+  on('profile:changed', () => { paintPlace(); paintSky(Date.now(), true); });
   on('tick', ({ now }) => {
     const d = new Date(now);
     const minute = Math.floor(now / 60000);
-    if (minute !== lastMinute) { lastMinute = minute; paintSky(now); if (places.current()) paintCity(); }
-    r.clock.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false });
+    if (minute !== lastMinute) { lastMinute = minute; paintSky(now); if (places.current()) paintPlace(); }
+    // Same format as the wake-up time (12 or 24 h, from the phone), so the two never disagree.
+    const t = fmtTime(d), m = t.match(/^(.*?)\s?([AaPp]\.?[Mm]\.?)$/);
+    const clock = m ? `${esc(m[1])}<small>${esc(m[2])}</small>` : esc(t);
+    if (r.clock.innerHTML !== clock) r.clock.innerHTML = clock;
     r.date.textContent = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
     r.status.textContent = statusText(now);
   });
@@ -244,6 +233,6 @@ export function mount(root) {
   renderBattery();
   renderPerms();
   paintSky(Date.now(), true);
-  paintCity();
+  paintPlace();
   places.refresh();
 }

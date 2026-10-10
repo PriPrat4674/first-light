@@ -75,11 +75,11 @@ public class AlarmService extends Service {
         PendingIntent openPi = PendingIntent.getActivity(this, 11, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String title, text;
         switch (kind) {
-            case "checkin": title = "Still up? 👀"; text = "Tap to answer your check-in."; break;
-            case "punish": title = "Round two ⏰"; text = "You missed your check-in."; break;
-            case "snooze": title = "Snooze is over ☀️"; text = "Up you get. Tap to stop the alarm."; break;
-            case "nap": title = "Nap's over ☀️"; text = "Tap to get up. I'll log your nap."; break;
-            default: title = "Good morning ☀️"; text = "Tap to stop the alarm. No easy way out."; break;
+            case "checkin": title = "Still up?"; text = "Tap to answer your check-in."; break;
+            case "punish": title = "Round two"; text = "You missed your check-in."; break;
+            case "snooze": title = "Snooze is over"; text = "Up you get. Tap to stop the alarm."; break;
+            case "nap": title = "Nap's over"; text = "Tap to get up. I'll log your nap."; break;
+            default: title = "Good morning"; text = "Tap to stop the alarm. No easy way out."; break;
         }
         Notification.Builder b;
         if (Build.VERSION.SDK_INT >= 26) {
@@ -113,7 +113,7 @@ public class AlarmService extends Service {
             cliff = false;
             if (custom != null && custom.exists() && custom.length() > 0) {
                 player.setDataSource(custom.getAbsolutePath());
-                cliff = !"punish".equals(kind);
+                cliff =!"punish".equals(kind);
             } else {
                 String name = "checkin".equals(kind) ? "note_" + Prefs.sound(this, "checkin", "bell") : null;
                 int res = name != null ? Sounds.rawId(this, name) : Sounds.alarmRaw(this, Prefs.sound(this, "alarm", "dawn"));

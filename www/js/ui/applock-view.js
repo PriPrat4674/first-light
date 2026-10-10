@@ -7,7 +7,7 @@ import { switchRow, stepperRow, wireSteppers, sheet, info } from './components.j
 
 export function mountPanel(el) {
   if (!native.isNative()) {
-    el.innerHTML = '<p class="soft">Keeps Instagram closed till your tasks are done. In the Android app 📱</p>';
+    el.innerHTML = '<p class="soft">Keeps Instagram closed till your tasks are done. In the Android app</p>';
     return;
   }
   let apps = null, filter = '';
@@ -30,7 +30,19 @@ export function mountPanel(el) {
         : c.packages.length ? `<p class="small soft">${c.packages.map((p) => esc(c.labels[p] || p)).join(', ')}</p>` : ''}`;
     const r = refs(el);
     wireSteppers(el, (k, v) => applock.setMaxHours(v));
-    if (r.perm) r.perm.onclick = () => native.openSettings('accessibility');
+    // Prominent disclosure before the Accessibility setting (required by Google Play).
+    if (r.perm) r.perm.onclick = async () => {
+      const ok = await sheet({
+        title: 'Why App Lock needs Accessibility',
+        body: `<p>It only notices when you open an app you chose to lock, and sends you back to your tasks.</p>
+          <ul class="day-facts">
+            <li>Never reads your screen or what you type.</li>
+            <li>Nothing leaves your phone.</li>
+          </ul>`,
+        actions: [{ label: 'Agree and continue', value: true, style: 'gold' }, { label: 'Cancel', value: false }]
+      });
+      if (ok) native.openSettings('accessibility');
+    };
     if (r.appinfo) r.appinfo.onclick = () => native.openSettings('app');
     r.load.onclick = async () => { apps = await native.listApps(); render(); };
     if (r.q) r.q.oninput = (e) => { filter = e.target.value; const pos = e.target.selectionStart; render().then(() => { const q = refs(el).q; q?.focus(); q?.setSelectionRange(pos, pos); }); };
@@ -50,8 +62,8 @@ export function mountBlocker() {
     const st = await native.status();
     const until = st.lockedUntil ? ` It unlocks by itself at ${fmtTime(new Date(st.lockedUntil))}.` : '';
     const v = await sheet({
-      title: `${label} is locked 🔒`,
-      body: `Tasks first, then scrolling 😌${until}`,
+      title: `${label} is locked`,
+      body: `Tasks first, then scrolling${until}`,
       actions: [{ label: 'Back to my tasks', value: 'ok', style: 'gold' }, { label: 'Emergency unlock', value: 'emergency' }]
     });
     if (v === 'emergency') emergency();
@@ -74,7 +86,7 @@ function emergency() {
   back.querySelector('[data-cancel]').onclick = close;
   back.addEventListener('click', (e) => { if (e.target === back) close(); });
   back.querySelector('[data-go]').onclick = () => {
-    if (applock.emergencyUnlock(input.value)) { close(); toast('Apps unlocked. Take care 💛'); }
+    if (applock.emergencyUnlock(input.value)) { close(); toast('Apps unlocked.'); }
     else { input.value = ''; input.placeholder = 'Not quite. Type it exactly.'; input.classList.add('shake'); }
   };
 }

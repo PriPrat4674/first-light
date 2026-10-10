@@ -1,7 +1,7 @@
 // App-wide constants and defaults. Change copy and defaults here, not inside features.
 
 export const APP_NAME = 'First Light';
-export const VERSION = '3.1.0';
+export const VERSION = '3.2.0';
 
 export const TEST_DELAY_MS = 10_000;
 
@@ -21,13 +21,17 @@ export const DEFAULT_TASKS = [
   { id: 't3', name: 'Tea is ready', proof: 'a freshly made cup of tea', gapMin: 10 }
 ];
 export const NEW_TASK = { name: 'New task', proof: 'what the photo should show', gapMin: 0 };
+// Hard shakes needed after the phrase, when "Shake to stop" is on.
+export const SHAKES_TO_STOP = 25;
 export const TASK_TEMPLATES = [
   { name: 'Make the bed', proof: 'a neatly made bed', gapMin: 0 },
   { name: 'Drink water', proof: 'a glass of water, half finished', gapMin: 0 },
   { name: 'Open the curtains', proof: 'open curtains with daylight', gapMin: 0 },
   { name: 'Stretch', proof: 'you mid-stretch', gapMin: 0 },
   { name: 'Wash your face', proof: 'a wet face or a towel in hand', gapMin: 0 },
-  { name: 'Shoes on', proof: 'your shoes on your feet', gapMin: 0 }
+  { name: 'Shoes on', proof: 'your shoes on your feet', gapMin: 0 },
+  { name: 'Shake awake', proof: 'shake the phone 25 times', kind: 'shake', target: 25, gapMin: 0 },
+  { name: 'Walk 25 steps', proof: 'walk 25 steps away from bed', kind: 'steps', target: 25, gapMin: 0 }
 ];
 export const MAX_TASKS = 12;
 export const MAX_GAP_MIN = 120;

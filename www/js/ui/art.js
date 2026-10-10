@@ -50,7 +50,7 @@ export const MOODS = ['ecstatic', 'happy', 'neutral', 'grumpy', 'sleepy', 'sulki
 const FUR = '#E9893B', FUR_DARK = '#C96E26', STRIPE = '#2A1A10', CREAM = '#FBEFD9', NOSE = '#C65F55', BLUSH = '#F39A8F';
 
 // c = { accent, ink }
-export function petSVG(mood = 'neutral', c = {}, { size = 120, label = '' } = {}) {
+export function petSVG(mood = 'neutral', c = {}, { size = 120, label = '', accessory = 'none' } = {}) {
   const ink = c.ink || '#1B1407', ac = c.accent || '#C8A55E';
   const eyes = {
     ecstatic: `<path d="M41 39l2.1 4.3 4.7.7-3.4 3.3.8 4.7-4.2-2.2-4.2 2.2.8-4.7-3.4-3.3 4.7-.7z" fill="${ink}"/>
@@ -78,7 +78,17 @@ export function petSVG(mood = 'neutral', c = {}, { size = 120, label = '' } = {}
     sleepy: `<g class="pet-sticker" fill="${CREAM}" stroke="${STRIPE}" stroke-width=".6" font-family="Georgia,serif" font-weight="700"><text x="78" y="22" font-size="12">z</text><text x="87" y="12" font-size="9">z</text></g>`,
     grumpy: `<g class="pet-sticker" stroke="${FUR_DARK}" stroke-width="2.4" stroke-linecap="round" fill="none" opacity=".9"><path d="M14 24q-4-5 0-10M20 20q-4-5 0-10"/><path d="M86 24q4-5 0-10M80 20q4-5 0-10"/></g>`
   }[mood] || '';
+
+  const accLayer = {
+    mug: `<g class="pet-acc-mug"><rect x="62" y="74" width="13" height="15" rx="3.5" fill="#C0392B" stroke="${ink}" stroke-width="1.2"/><path d="M75 77h3.5q2 0 2 3.5t-2 3.5h-3.5" fill="none" stroke="#C0392B" stroke-width="2.2" stroke-linecap="round"/><path d="M66 70q1.5 -3 3 -1.5t2.5 -3" fill="none" stroke="${CREAM}" stroke-width="1.2" stroke-linecap="round" opacity="0.85"/></g>`,
+    scarf: `<g class="pet-acc-scarf"><path d="M30 63q20 7 40 0q3 7-5 9q-15 3-30 0z" fill="#E74C3C" stroke="${ink}" stroke-width="1.2"/><rect x="58" y="66" width="9" height="17" rx="2" fill="#C0392B" stroke="${ink}" stroke-width="1.2"/><line x1="58" y1="81" x2="67" y2="81" stroke="#F1C40F" stroke-width="1.8"/></g>`,
+    shades: `<g class="pet-acc-shades"><path d="M33 39h16v10q-8 2-16 0z" fill="#1A1A1A" stroke="${ink}" stroke-width="1.2"/><path d="M51 39h16v10q-8 2-16 0z" fill="#1A1A1A" stroke="${ink}" stroke-width="1.2"/><line x1="49" y1="43" x2="51" y2="43" stroke="#555" stroke-width="2"/><line x1="35" y1="41" x2="42" y2="47" stroke="rgba(255,255,255,0.4)" stroke-width="1.2"/></g>`,
+    crown: `<g class="pet-acc-crown"><path d="M37 23l3 -11l10 5l10 -5l3 11z" fill="#F1C40F" stroke="#D4AC0D" stroke-width="1.4"/><circle cx="40" cy="12" r="2" fill="#E74C3C"/><circle cx="50" cy="17" r="2.2" fill="#3498DB"/><circle cx="60" cy="12" r="2" fill="#E74C3C"/></g>`,
+    aura: `<g class="pet-acc-aura" stroke="#F39C12" stroke-width="1.8" stroke-linecap="round" opacity="0.85"><circle cx="50" cy="50" r="47" fill="none" stroke-dasharray="4,6" opacity="0.6"/><line x1="50" y1="2" x2="50" y2="6"/><line x1="84" y1="16" x2="81" y2="19"/><line x1="98" y1="50" x2="94" y2="50"/><line x1="84" y1="84" x2="81" y2="81"/><line x1="16" y1="16" x2="19" y2="19"/><line x1="2" y1="50" x2="6" y2="50"/><line x1="16" y1="84" x2="19" y2="81"/></g>`
+  }[accessory] || '';
+
   return `<svg class="pet pet-${mood}" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${label || `Pip is ${mood}`}">
+    ${accLayer.includes('pet-acc-aura') ? accLayer : ''}
     ${sticker}
     <g class="pet-tail"><path d="M68 84q18 2 20-14q1-8-5-11" fill="none" stroke="${FUR}" stroke-width="6" stroke-linecap="round"/>
       <path d="M86.4 76.5l-5-2M88.2 68.5l-5.2.2" stroke="${STRIPE}" stroke-width="2.2" stroke-linecap="round"/><circle cx="83" cy="59" r="3.6" fill="${STRIPE}"/></g>
@@ -96,5 +106,6 @@ export function petSVG(mood = 'neutral', c = {}, { size = 120, label = '' } = {}
     ${cheeks}${eyes}
     <path d="M46.5 51.5h7l-3.5 4z" fill="${NOSE}"/>
     ${mouth}
+    ${accLayer && !accLayer.includes('pet-acc-aura') ? accLayer : ''}
   </svg>`;
 }

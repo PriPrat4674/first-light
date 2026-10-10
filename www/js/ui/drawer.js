@@ -5,19 +5,21 @@ import * as native from '../services/native.js';
 import * as profile from '../features/profile.js';
 import * as tabs from './tabs.js';
 import { petMarkup } from './pet-view.js';
+import { icon } from './icons.js';
 
 const inApp = native.isNative();
 // Each menu item opens Settings showing only these cards (data-group values in settings-view.js).
 export const GROUPS = [
-  { id: 'look', icon: '🎨', title: 'Look & feel', cards: ['look'] },
-  { id: 'sleep', icon: '🌙', title: 'Sleep schedule', cards: ['sleep'] },
-  { id: 'applock', icon: '🔒', title: 'App lock', cards: ['applock'] },
-  { id: 'rules', icon: '⏰', title: 'Snooze & check-in', cards: ['snooze', 'checkin'] },
-  { id: 'sounds', icon: '🔔', title: 'Notification sounds', cards: ['sounds'] },
-  ...(inApp ? [{ id: 'perms', icon: '✅', title: 'Permissions', cards: ['perms'] }] : [{ id: 'battery', icon: '🔋', title: 'Battery & alerts', cards: ['battery', 'notif'] }]),
-  { id: 'you', icon: '🐯', title: 'You & Pip', cards: ['you'] },
-  { id: 'reset', icon: '🧹', title: 'Start over', cards: ['reset'] },
-  { id: 'about', icon: 'ℹ️', title: 'About', cards: ['about'] }
+  { id: 'look', icon: 'palette', title: 'Look & feel', cards: ['look'], section: 'You' },
+  { id: 'you', icon: 'paw', title: 'You & Pip', cards: ['you'], section: 'You' },
+  { id: 'rules', icon: 'alarm', title: 'Alarm rules', cards: ['stop', 'snooze', 'checkin'], section: 'Alarm' },
+  { id: 'sounds', icon: 'bell', title: 'Sounds', cards: ['sounds'], section: 'Alarm' },
+  { id: 'applock', icon: 'lock', title: 'App lock', cards: ['applock'], section: 'Alarm' },
+  ...(inApp ? [{ id: 'perms', icon: 'shield', title: 'Permissions', cards: ['perms'], section: 'Alarm' }] : [{ id: 'battery', icon: 'battery', title: 'Battery & alerts', cards: ['battery', 'notif'], section: 'Alarm' }]),
+  { id: 'sleep', icon: 'moon', title: 'Sleep schedule', cards: ['sleep'], section: 'Alarm' },
+  { id: 'backup', icon: 'archive', title: 'Backup & restore', cards: ['backup'], section: 'Data' },
+  { id: 'reset', icon: 'reset', title: 'Start over', cards: ['reset'], section: 'Data' },
+  { id: 'about', icon: 'info', title: 'About', cards: ['about'], section: 'Data' }
 ];
 export const titleFor = (id) => GROUPS.find((g) => g.id === id)?.title || null;
 export const cardsFor = (id) => GROUPS.find((g) => g.id === id)?.cards || null;
@@ -33,7 +35,7 @@ export function open() {
   el.innerHTML = `<nav class="drawer" role="dialog" aria-modal="true" aria-label="Menu">
       <div class="drawer-head">${petMarkup('happy', 54)}<div><strong>${p.name ? `Hi, ${esc(p.name)}` : 'Hi there'}</strong><span class="small muted">${APP_NAME}</span></div>
         <button class="icon-btn" data-close aria-label="Close menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
-      <ul class="drawer-list">${GROUPS.map((g) => `<li><button data-group-go="${g.id}"><span class="d-ico" aria-hidden="true">${g.icon}</span>${esc(g.title)}</button></li>`).join('')}</ul>
+      ${[...new Set(GROUPS.map((g) => g.section))].map((sec) => `<p class="drawer-sec">${esc(sec)}</p><ul class="drawer-list">${GROUPS.filter((g) => g.section === sec).map((g) => `<li><button data-group-go="${g.id}"><span class="d-ico">${icon(g.icon, 20)}</span>${esc(g.title)}</button></li>`).join('')}</ul>`).join('')}
     </nav>`;
   document.body.appendChild(el);
   requestAnimationFrame(() => el?.classList.add('open'));

@@ -53,6 +53,13 @@ export async function openUrl(url) {
 }
 export const takeLaunch = () => call('takeLaunch', {}, {});
 
+// Hands a file to Android's share sheet (save to Drive, send to WhatsApp…). Resolves { ok }.
+export async function shareFile(blob, name, title = 'Share') {
+  if (!FL) return { ok: false };
+  return call('shareFile', { name, mime: blob.type || 'application/octet-stream', title, base64: await blobToBase64(blob) }, { ok: false });
+}
+export const setWidget = (info) => call('setWidget', info);
+
 export function on(event, fn) {
   if (!FL) return () => {};
   const handle = FL.addListener(event, fn);

@@ -4,9 +4,43 @@ import { on } from '../core/events.js';
 import { refs, esc } from '../core/util.js';
 
 let root, r, stream = null, facing = 'user', settle = null;
+let attempts = 0;
 
-async function judge(/* photoDataUrl, task */) {
-  return { pass: true, reason: 'Photo saved as proof.' };
+// Quick on-phone checks; the photo never leaves the phone. It catches a dark room or a covered
+// lens, and (where the phone can detect faces) a selfie with no face. It doesn't recognise
+// objects, so it never claims to have seen your tea.
+async function judge(photoDataUrl, taskTitle) {
+  attempts++;
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = photoDataUrl; });
+    const canvas = document.createElement('canvas');
+    const w = 120, h = Math.round(120 * (img.height / img.width || 1));
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let sum = 0, sumSq = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      sum += lum; sumSq += lum * lum;
+    }
+    const n = w * h, avg = sum / n, spread = Math.sqrt(Math.max(0, sumSq / n - avg * avg));
+    if (avg < 22) return { pass: false, reason: 'Too dark. Turn on a light.' };
+    if (spread < 9) return { pass: false, reason: 'The lens looks covered.' };
+    if (/selfie|eyes|face/i.test(taskTitle || '') && 'FaceDetector' in window) {
+      try {
+        const faces = await new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 }).detect(img);
+        if (!faces?.length) {
+          // Face detection misses sometimes, so the second try is taken on trust.
+          return attempts >= 2 ? { pass: true, reason: 'Saved. No face found, so this one’s on trust.' } : { pass: false, reason: 'No face found. Look at the camera.' };
+        }
+      } catch {}
+    }
+    return { pass: true, reason: 'Saved as proof.' };
+  } catch {
+    return { pass: true, reason: 'Saved as proof.' };
+  }
 }
 
 export function mount(el) {
@@ -27,6 +61,7 @@ export function mount(el) {
 
 export function takeProof(task) {
   finish(false);
+  attempts = 0;
   facing = /selfie|eyes|face/i.test(task.name + task.proof) ? 'user' : 'environment';
   r.title.textContent = task.name;
   r.proof.textContent = `Photo must show: ${task.proof}`;

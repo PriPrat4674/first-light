@@ -13,10 +13,10 @@ export async function handle(text) {
     if (!full) { toast('In Spotify, tap Share → Copy link, then paste it in Music.', 5000); return { ok: false }; }
     kind = 'spotify'; url = full;
   }
-  if (kind === 'none' || kind === 'unknown') { toast('Hmm, I can use Spotify, YouTube and Instagram links 🤔', 4000); return { ok: false }; }
+  if (kind === 'none' || kind === 'unknown') { toast('I can use Spotify, YouTube and Instagram links.', 4000); return { ok: false }; }
   let use = null;
   if (kind === 'youtube-video') {
-    use = await sheet({ title: 'Use this video for…', actions: [{ label: 'Waking me up 🎵', value: 'alarm', style: 'gold' }, { label: 'Motivation after I’m up 🚀', value: 'clip' }] });
+    use = await sheet({ title: 'Use this video for…', actions: [{ label: 'Waking me up', value: 'alarm', style: 'gold' }, { label: 'Motivation after I’m up', value: 'clip' }] });
     if (!use) return { ok: false };
   }
   const res = share.apply(kind, url, use);

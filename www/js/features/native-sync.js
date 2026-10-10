@@ -10,6 +10,7 @@ import * as songs from './songs.js';
 import * as sleep from './sleep.js';
 import * as sounds from './sounds.js';
 import * as applock from './applock.js';
+import * as stats from './stats.js';
 import { media, load, save } from '../core/storage.js';
 import * as local from './sources/local.js';
 
@@ -72,7 +73,10 @@ export async function init() {
   native.on('sleepEvent', async () => sleep.applyNativeEvents(await native.takeSleepEvents()));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') catchUp(); });
 
+  const syncWidget = () => native.setWidget({ streak: stats.currentStreak() });
+  on('streak:changed', syncWidget);
   sounds.sync();
+  syncWidget();
   sleep.syncNative();
   applock.sync();
   await syncAlarm();

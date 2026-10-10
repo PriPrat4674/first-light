@@ -69,6 +69,15 @@ export function dismiss(text) {
   return true;
 }
 
+// Checks the phrase without stopping, for when shaking is required on top of it.
+export const phraseMatches = (text) => m?.phase === 'ringing' && !!norm(text) && norm(text) === norm(phrase());
+
+// "Shake to stop": an optional extra step after the phrase. Off unless you switch it on.
+let rules = load('stop-rules', { shake: false });
+if (!rules || typeof rules !== 'object') rules = { shake: false };
+export const stopRules = () => ({ ...rules });
+export function setShakeToStop(on) { rules.shake = !!on; save('stop-rules', rules); return rules.shake; }
+
 // "Try the full morning": a test that runs the tasks and check-in too, 10× faster.
 export function startFullTest() {
   if (isActive()) return false;
