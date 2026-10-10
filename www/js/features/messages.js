@@ -11,7 +11,7 @@ const fmt = (hhmm) => {
 
 // Buckets by minutes after midnight. {t} is replaced with the time.
 const ALARM_LINES = [
-  { upTo: 240, lines: ['Whoa, {t}? Even the owls are yawning 🦉', 'A {t} start. Legendary hours 🌌', '{t}! Bold. Very bold. We believe in you 💪'] },
+  { upTo: 240, lines: ['Whoa, {t}? Even the stars are yawning 🐯', 'A {t} start. Legendary hours 🌌', '{t}! Bold. Very bold. We believe in you 💪'] },
   { upTo: 330, lines: ['Oho! We have an early riser tomorrow!! 🌅', 'Oho! An early riser at {t}! The sun will have to hurry 🌅', 'Up before the sun? Oho, main-character energy ✨'] },
   { upTo: 390, lines: ['Early bird mode: on 🐦', 'Sunrise club, party of one ☀️', '{t}. Quiet streets, fresh air, all yours 🌄'] },
   { upTo: 450, lines: ['A solid, sensible {t}. Classic you ✨', '{t}: the sweet spot. Let’s do this 🌤️', 'Right on time for a calm morning 🍵'] },
@@ -36,7 +36,7 @@ export function alarmMessage(hhmm, { date = new Date(), streak = 0, name = '' } 
 
 export function greeting(name = '', hour = new Date().getHours()) {
   const who = name ? `, ${name}` : '';
-  if (hour < 4) return `Up late${who}? 🦉`;
+  if (hour < 4) return `Up late${who}? 🐯`;
   if (hour < 12) return `Good morning${who} ☀️`;
   if (hour < 17) return `Good afternoon${who} 🌤️`;
   if (hour < 21) return `Good evening${who} 🌆`;
@@ -44,9 +44,9 @@ export function greeting(name = '', hour = new Date().getHours()) {
 }
 
 const PET_LINES = {
-  ecstatic: ['{streak} days in a row?! I’m throwing a party 🎉', 'You’re unstoppable. I’m wearing a hat for you 🥳', 'Streak legend. I’m telling all the owls 🦉✨'],
+  ecstatic: ['{streak} days in a row?! I’m throwing a party 🎉', 'You’re unstoppable. I’m wearing a hat for you 🥳', 'Streak legend. I’m telling the whole jungle 🐯✨'],
   happy: ['Nice one. I’m proud of you 🫶', 'Morning proven. That’s my human 💛', 'Look at us, being consistent 😌'],
-  neutral: ['Ready when you are ⏰', 'Let’s make tomorrow a good one 🌅', 'Hoot. Set an alarm, I’ll keep watch 🦉'],
+  neutral: ['Ready when you are ⏰', 'Let’s make tomorrow a good one 🌅', 'Rawr. Set an alarm, I’ll keep watch 🐯'],
   grumpy: ['Snoozing? Really? Hmph 😤', 'I saw that snooze. I’m not mad, just… grumpy 😒', 'The pillow won this round. Not again, okay? 🙄'],
   sleepy: ['It’s late. Phone down, eyes closed 😴', 'Bedtime-ish. I’m already yawning 🥱', 'Sweet dreams soon? Tomorrow-you says thanks 🌙'],
   sulking: ['Our streak broke… I’ll get over it. Probably 🥺', 'I miss our streak. Start a new one tomorrow? 💧', 'Day one again. I believe in comebacks 🌱']

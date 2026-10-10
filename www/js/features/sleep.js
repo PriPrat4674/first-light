@@ -4,6 +4,7 @@
 import { load, save } from '../core/storage.js';
 import { on, emit } from '../core/events.js';
 import { dayKey, clamp } from '../core/util.js';
+import { SLEEP_GOAL_LIMITS, NAP_LIMITS } from '../config.js';
 import * as native from '../services/native.js';
 
 const HALF_HOUR = 30 * 60_000;
@@ -12,12 +13,16 @@ const DEFAULTS = {
   prompts: true,
   asleepCheck: 'warm', // 'warm' | 'silent' | 'off'
   pending: { bedAt: null, laterUntil: null, asleepAt: null, promptedOn: null },
-  nights: []
+  nights: [],
+  naps: [],
+  nap: null // { startAt, endAt } while napping
 };
 let s = load('sleep', DEFAULTS);
 s.schedule = { ...DEFAULTS.schedule, ...(s.schedule || {}) };
 s.pending = { ...DEFAULTS.pending, ...(s.pending || {}) };
 if (!Array.isArray(s.nights)) s.nights = [];
+if (!Array.isArray(s.naps)) s.naps = [];
+if (s.nap && !(s.nap.startAt > 0 && s.nap.endAt > s.nap.startAt)) s.nap = null;
 
 const commit = () => { save('sleep', s); emit('sleep:changed', get()); };
 export const get = () => structuredClone(s);
@@ -27,7 +32,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export function setSchedule({ bed, wake, goal } = {}) {
   if (bed !== undefined && TIME_RE.test(bed)) s.schedule.bed = bed;
   if (wake !== undefined && TIME_RE.test(wake)) s.schedule.wake = wake;
-  if (goal !== undefined && Number.isFinite(Number(goal))) s.schedule.goal = clamp(Math.round(Number(goal) * 2) / 2, 6, 10);
+  if (goal !== undefined && goal !== null && goal !== '' && Number.isFinite(Number(goal))) s.schedule.goal = clamp(Math.round(Number(goal) * 2) / 2, SLEEP_GOAL_LIMITS[0], SLEEP_GOAL_LIMITS[1]);
   commit();
   syncNative();
   return { ...s.schedule };
@@ -55,6 +60,62 @@ export function syncNative() {
   else native.cancel('bedtime');
   native.setSounds({ asleep: s.asleepCheck });
 }
+
+/**
+ * Is this a time you'd normally be going to bed? From 2 hours before bedtime until your wake-up time.
+ * Outside it, "Going to sleep" is treated as a nap.
+ */
+export function isSleepTime(at = Date.now()) {
+  const d = new Date(at);
+  const now = d.getHours() * 60 + d.getMinutes();
+  const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+  const from = (toMin(s.schedule.bed) - 120 + 1440) % 1440, to = toMin(s.schedule.wake);
+  return from <= to ? now >= from && now < to : now >= from || now < to;
+}
+
+/* ---------- naps ---------- */
+export const napState = () => (s.nap ? { ...s.nap } : null);
+
+export function startNap(minutes, at = Date.now()) {
+  const mins = Math.round(Number(minutes));
+  if (!Number.isFinite(mins)) return null;
+  const m = clamp(mins, NAP_LIMITS[0], NAP_LIMITS[1]);
+  s.nap = { startAt: at, endAt: at + m * 60_000 };
+  commit();
+  if (native.isNative()) native.schedule('nap', s.nap.endAt, 'nap');
+  emit('nap:started', { ...s.nap });
+  return { ...s.nap };
+}
+
+// Ends the nap (timer rang, or you woke early) and logs it as sleep for today.
+export function endNap(at = Date.now()) {
+  if (!s.nap) return null;
+  const { startAt } = s.nap;
+  s.nap = null;
+  if (native.isNative()) { native.cancel('nap'); native.stopRinging(); }
+  const hours = Math.max(0, (at - startAt) / 3_600_000);
+  let nap = null;
+  if (hours >= 1 / 60) {
+    nap = { date: dayKey(new Date(at)), startAt, wakeAt: at, hours: Math.round(hours * 100) / 100 };
+    s.naps = [nap, ...s.naps].slice(0, 120);
+  }
+  commit();
+  emit('nap:ended', nap);
+  return nap;
+}
+
+export const napsOn = (date) => s.naps.filter((n) => n.date === date);
+const napHours = (date) => Math.round(napsOn(date).reduce((a, n) => a + n.hours, 0) * 100) / 100;
+
+// Time's up: announce it once (from the clock tick here, or from Android's alarm via native-sync).
+export function napRang() {
+  if (!s.nap || s.nap.rang) return false;
+  s.nap.rang = true;
+  commit();
+  emit('nap:ring', { ...s.nap });
+  return true;
+}
+on('tick', ({ now }) => { if (s.nap && !s.nap.rang && now >= s.nap.endAt) napRang(); });
 
 /* ---------- bedtime answers ---------- */
 export function goingToSleep(at = Date.now(), { fromNative = false } = {}) {
@@ -129,20 +190,29 @@ export function classify(hours, goal = s.schedule.goal) {
 }
 
 // Nights from the last 7 days.
+// Days from the last 7 days. Each day counts its night plus any naps ("total").
 export function week(now = Date.now()) {
   const since = now - 7 * 86_400_000;
-  const nights = s.nights.filter((n) => n.wakeAt > since);
+  const byDate = new Map();
+  for (const n of s.nights.filter((x) => x.wakeAt > since)) byDate.set(n.date, { ...n, nap: 0 });
+  for (const n of s.naps.filter((x) => x.wakeAt > since)) {
+    const d = byDate.get(n.date) || { date: n.date, hours: 0, nap: 0, wakeAt: n.wakeAt, napOnly: true };
+    d.nap = Math.round((d.nap + n.hours) * 100) / 100;
+    byDate.set(n.date, d);
+  }
+  const days = [...byDate.values()].map((d) => ({ ...d, nap: Math.round(d.nap * 10) / 10, total: Math.round((d.hours + d.nap) * 10) / 10 })).sort((a, b) => a.date.localeCompare(b.date));
   const goal = s.schedule.goal;
-  const total = nights.reduce((a, n) => a + n.hours, 0);
-  const debt = nights.reduce((a, n) => a + Math.max(0, goal - n.hours), 0);
+  const total = days.reduce((a, n) => a + n.total, 0);
+  const debt = days.reduce((a, n) => a + Math.max(0, goal - n.total), 0);
   return {
-    count: nights.length,
-    average: nights.length ? Math.round((total / nights.length) * 10) / 10 : null,
+    count: days.length,
+    average: days.length ? Math.round((total / days.length) * 10) / 10 : null,
     debt: Math.round(debt * 10) / 10,
-    nights: nights.slice().reverse(),
+    nights: days,
     goal
   };
 }
+export const todayNapHours = (now = new Date()) => napHours(dayKey(now));
 
 /**
  * Weekend sleep-in suggestion, shown Saturday afternoon to Sunday morning.

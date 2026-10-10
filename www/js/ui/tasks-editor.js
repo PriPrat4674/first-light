@@ -3,13 +3,13 @@ import { on } from '../core/events.js';
 import { esc, toast, vibrateTap } from '../core/util.js';
 import { TASK_TEMPLATES, MAX_TASKS, MAX_GAP_MIN } from '../config.js';
 import * as tasks from '../features/tasks.js';
-import { ICONS, switchRow, stepperRow, wireSteppers } from './components.js';
+import { ICONS, switchRow, stepperRow, wireSteppers, info } from './components.js';
 
 export function mount(root) {
   let open = null; // id of the expanded task
 
   root.innerHTML = `
-    <header class="screen-head"><h1>Morning tasks</h1><p>Prove each one with a live photo, in order. Waits stop you from rushing through and crawling back to bed.</p></header>
+    <p class="intro soft">Prove each with a live photo, in order 📸 ${info('Morning tasks', 'Each task needs a live photo. A wait (like 10 minutes for tea) stops you rushing through and crawling back to bed.')}</p>
     <div data-list></div>
     <div class="card">
       <h3>Add a task</h3>
@@ -32,7 +32,7 @@ export function mount(root) {
         ${expanded ? `<div class="task-body">
           <label class="field"><span>Task</span><input type="text" data-f="name" value="${esc(t.name)}" maxlength="60" autocomplete="off"><div class="error hidden" data-err="name">A task needs a name.</div></label>
           <label class="field"><span>The photo must show</span><input type="text" data-f="proof" value="${esc(t.proof)}" maxlength="120" autocomplete="off"><div class="error hidden" data-err="proof">Describe what the photo should show.</div></label>
-          ${stepperRow({ key: 'gapMin', title: 'Wait before this task', desc: i === 0 ? 'Counted from when the alarm stops' : 'After the previous task', value: t.gapMin || 0, min: 0, max: MAX_GAP_MIN, step: 5, unit: ' min' })}
+          ${stepperRow({ key: 'gapMin', title: 'Wait first', desc: i === 0 ? 'After the alarm stops' : 'After the last task', value: t.gapMin || 0, min: 0, max: MAX_GAP_MIN, step: 5, unit: ' min' })}
           <div class="task-tools">
             <button class="btn line" data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="Move up">${ICONS.up}</button>
             <button class="btn line" data-act="down" ${i === n - 1 ? 'disabled' : ''} aria-label="Move down">${ICONS.down}</button>
@@ -46,7 +46,7 @@ export function mount(root) {
     const list = tasks.all();
     listEl.innerHTML = list.length
       ? list.map((t, i) => card(t, i, list.length)).join('')
-      : '<div class="card"><p class="soft italic">No tasks yet. Add one below, or the alarm stops as soon as you type the phrase.</p></div>';
+      : '<div class="card"><p class="soft italic">No tasks yet. Add one below 👇</p></div>';
     const body = listEl.querySelector('.task-body');
     if (body) wireSteppers(body, (key, v) => tasks.update(open, { [key]: v })?.gapMin ?? v);
     const full = !tasks.canAdd();
@@ -56,7 +56,7 @@ export function mount(root) {
   }
 
   function renderChaos() {
-    chaosEl.innerHTML = switchRow({ key: 'chaos', title: 'Chaos task', desc: 'Adds one random task at the end each morning, like “photograph something yellow.”', checked: tasks.options().chaos });
+    chaosEl.innerHTML = switchRow({ key: 'chaos', title: 'Chaos task 🎲', desc: 'One surprise, like “something yellow”', checked: tasks.options().chaos });
   }
 
   listEl.addEventListener('click', (e) => {

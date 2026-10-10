@@ -18,11 +18,13 @@ import org.json.JSONObject;
 final class AlarmScheduler {
     static final String EXTRA_ID = "fl_id";
     static final String EXTRA_KIND = "fl_kind";
+    static final String EXTRA_TITLE = "fl_title";
+    static final String EXTRA_TEXT = "fl_text";
 
     private AlarmScheduler() {}
 
     static boolean isRinging(String kind) {
-        return "wake".equals(kind) || "test".equals(kind) || "snooze".equals(kind) || "checkin".equals(kind) || "punish".equals(kind);
+        return "wake".equals(kind) || "test".equals(kind) || "snooze".equals(kind) || "checkin".equals(kind) || "punish".equals(kind) || "nap".equals(kind);
     }
 
     static void schedule(Context c, JSONObject alarm) {
@@ -105,7 +107,7 @@ final class AlarmScheduler {
         if (am == null) return;
         String id = a.optString("id"), kind = a.optString("kind", "wake");
         long at = a.optLong("at");
-        PendingIntent fire = pending(c, id, kind, PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent fire = pending(c, id, kind, a.optString("title", null), a.optString("text", null), PendingIntent.FLAG_UPDATE_CURRENT);
         try {
             if (isRinging(kind)) {
                 Intent show = new Intent(c, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -123,8 +125,15 @@ final class AlarmScheduler {
     }
 
     private static PendingIntent pending(Context c, String id, String kind, int flags) {
+        return pending(c, id, kind, null, null, flags);
+    }
+
+    /** title/text are only used by plain notifications (kind "task"). Extras don't affect matching, so cancel still works. */
+    private static PendingIntent pending(Context c, String id, String kind, String title, String text, int flags) {
         Intent i = new Intent(c, AlarmReceiver.class).setAction("app.firstlight.ALARM." + id)
             .putExtra(EXTRA_ID, id).putExtra(EXTRA_KIND, kind);
+        if (title != null) i.putExtra(EXTRA_TITLE, title);
+        if (text != null) i.putExtra(EXTRA_TEXT, text);
         return PendingIntent.getBroadcast(c, id.hashCode(), i, flags | PendingIntent.FLAG_IMMUTABLE);
     }
 }

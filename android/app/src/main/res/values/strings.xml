@@ -6,4 +6,5 @@
     <string name="custom_url_scheme">app.firstlight.alarm</string>
     <string name="lock_service_label">First Light app lock</string>
     <string name="lock_service_description">Keeps the apps you chose closed until your morning is proven. It only notices which app opens. It never reads your screen, messages or passwords. It unlocks on its own after a few hours so you are never stuck.</string>
+    <string name="share_label">First Light</string>
 </resources>

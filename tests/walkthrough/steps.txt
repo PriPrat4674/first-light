@@ -9,19 +9,27 @@
 09. Setup - Android permissions — 09-setup---android-permissions.png
 10. Setup - notifications allowed — 10-setup---notifications-allowed.png
 11. Setup - all set — 11-setup---all-set.png
-12. Alarm tab - first look — 12-alarm-tab---first-look.png
-13. Tasks - added Make the bed — 13-tasks---added-make-the-bed.png
-14. Sounds — 14-sounds.png
-15. Settings — 15-settings.png
-16. Armed — 16-armed.png
-17. Morning - ringing — 17-morning---ringing.png
-18. Morning - typing with a mistake — 18-morning---typing-with-a-mistake.png
-19. Morning - tasks — 19-morning---tasks.png
-20. Morning - first task proven — 20-morning---first-task-proven.png
-21. Morning - check-in — 21-morning---check-in.png
-22. Morning - report card — 22-morning---report-card.png
-23. Progress — 23-progress.png
-24. Alarm tab - after first morning — 24-alarm-tab---after-first-morning.png
-25. App lock reminder — 25-app-lock-reminder.png
-26. Ivory, rose, friendly, bold — 26-ivory,-rose,-friendly,-bold.png
-27. Dusk, gold, typewriter, elegant — 27-dusk,-gold,-typewriter,-elegant.png
+12. Pip flies in after setup — 12-pip-flies-in-after-setup.png
+13. Alarm tab - first look — 13-alarm-tab---first-look.png
+14. Menu — 14-menu.png
+15. Menu - Look and feel — 15-menu---look-and-feel.png
+16. Tasks - added Make the bed — 16-tasks---added-make-the-bed.png
+17. Sounds — 17-sounds.png
+18. Shared a Spotify playlist — 18-shared-a-spotify-playlist.png
+19. Menu - Sleep schedule — 19-menu---sleep-schedule.png
+20. Armed — 20-armed.png
+21. Morning - ringing — 21-morning---ringing.png
+22. Morning - typing with a mistake — 22-morning---typing-with-a-mistake.png
+23. Morning - tasks — 23-morning---tasks.png
+24. Morning - stepped away, pill counts down — 24-morning---stepped-away,-pill-counts-down.png
+25. Morning - first task proven — 25-morning---first-task-proven.png
+26. Morning - check-in — 26-morning---check-in.png
+27. Morning - report card — 27-morning---report-card.png
+28. Progress — 28-progress.png
+29. Alarm tab - after first morning — 29-alarm-tab---after-first-morning.png
+30. App lock reminder — 30-app-lock-reminder.png
+31. Ivory, rose, friendly, bold — 31-ivory,-rose,-friendly,-bold.png
+32. Dusk, gold, typewriter, elegant — 32-dusk,-gold,-typewriter,-elegant.png
+33. Kerala city theme — 33-kerala-city-theme.png
+34. Nap - how long? — 34-nap---how-long?.png
+35. Nap - over — 35-nap---over.png

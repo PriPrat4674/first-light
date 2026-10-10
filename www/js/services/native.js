@@ -23,7 +23,8 @@ export const status = () => call('status', {}, { exactAlarms: true, notification
 export const requestNotifications = () => call('requestNotifications', {}, { granted: false });
 export const openSettings = (which) => call('openSettings', { which });
 
-export const schedule = (id, at, kind, repeatDaily = false) => call('schedule', { id, at: Math.round(at), kind, repeatDaily });
+// extra: { title, text } for a plain notification (kind 'task').
+export const schedule = (id, at, kind, repeatDaily = false, extra = {}) => call('schedule', { id, at: Math.round(at), kind, repeatDaily, ...extra });
 export const cancel = (id) => call('cancel', { id });
 export const ring = (kind) => call('ring', { kind });
 export const stopRinging = () => call('stopRinging');
@@ -42,7 +43,14 @@ export const configureLock = (cfg) => call('configureLock', cfg);
 export const lockNow = () => call('lockNow');
 export const unlock = () => call('unlock');
 
-export const setIcon = (name) => call('setIcon', { name });
+// The tiger logo uses the launcher entry that was once the owl, so existing installs keep their icon.
+export const setIcon = (name) => call('setIcon', { name: name === 'tiger' ? 'owl' : name });
+
+// Opens a link outside the app: the Spotify/YouTube app if installed, otherwise the browser.
+export async function openUrl(url) {
+  if (FL) { const r = await call('openUrl', { url }, null); if (r?.ok) return true; }
+  try { window.open(url, '_blank', 'noopener'); return true; } catch { return false; }
+}
 export const takeLaunch = () => call('takeLaunch', {}, {});
 
 export function on(event, fn) {

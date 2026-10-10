@@ -39,11 +39,14 @@ function handleFire(kind) {
     if (!morning.isActive()) emit('alarm:fire', { test: kind === 'test', fromNative: true });
   } else if (kind === 'snooze') {
     snooze.endNow();
+  } else if (kind === 'nap') {
+    sleep.napRang();
   }
 }
 
 function handleLaunch(launch = {}) {
   if (launch.kind) handleFire(launch.kind);
+  if (launch.shared) emit('share:text', { text: launch.shared });
   if (launch.lockedPkg) emit('applock:blocked', { pkg: launch.lockedPkg, label: applock.labelFor(launch.lockedPkg, launch.lockedLabel) });
 }
 

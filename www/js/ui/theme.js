@@ -8,7 +8,13 @@ export const THEMES = {
   noir:     { label: 'Noir', note: 'True black. Kindest to your battery.', dark: true,  bg: '#000000', surface: '#0E0D0A', surface2: '#17150F', hair: '#2A261C', hair2: '#3D3727', text: '#F2EADB', text2: '#CBC1AA', muted: '#958C75' },
   ivory:    { label: 'Ivory', note: 'Warm paper, like a good notebook.', dark: false, bg: '#F6F1E7', surface: '#FFFDF8', surface2: '#EFE8DA', hair: '#E2D8C6', hair2: '#CBBEA6', text: '#1D1A14', text2: '#463F33', muted: '#665D4C' },
   midnight: { label: 'Midnight', note: 'Deep navy, calm at night.', dark: true,  bg: '#080E1F', surface: '#0F182E', surface2: '#16213C', hair: '#22304F', hair2: '#324368', text: '#E9EEF8', text2: '#B7C2DA', muted: '#8592AF' },
-  dusk:     { label: 'Dusk', note: 'Plum and rose, soft and cosy.', dark: true,  bg: '#160D1B', surface: '#211428', surface2: '#2B1B34', hair: '#3A2646', hair2: '#4D345D', text: '#F6EAF1', text2: '#D7C0CE', muted: '#A88FA1' }
+  dusk:     { label: 'Dusk', note: 'Plum and rose, soft and cosy.', dark: true,  bg: '#160D1B', surface: '#211428', surface2: '#2B1B34', hair: '#3A2646', hair2: '#4D345D', text: '#F6EAF1', text2: '#D7C0CE', muted: '#A88FA1' },
+  // City themes: each also gets a skyline, live weather and a local headline (features/places.js).
+  newyork:  { label: 'New York', note: 'Steel skyline nights', city: true, dark: true,  bg: '#0A0E14', surface: '#121922', surface2: '#1A2330', hair: '#25303E', hair2: '#364456', text: '#EEF2F7', text2: '#BCC7D4', muted: '#8B98A9' },
+  sanfrancisco: { label: 'San Francisco', note: 'Fog and bridge orange', city: true, dark: false, bg: '#ECEFF2', surface: '#FFFFFF', surface2: '#E1E6EB', hair: '#D2D9E0', hair2: '#B7C1CB', text: '#141A20', text2: '#38424C', muted: '#56616C' },
+  kerala:   { label: 'Kerala', note: 'Backwaters and palms', city: true, dark: true,  bg: '#05130C', surface: '#0B1E14', surface2: '#11281C', hair: '#1C3828', hair2: '#2A4C39', text: '#EEF5E8', text2: '#C2D6BF', muted: '#8EA790' },
+  tokyo:    { label: 'Tokyo', note: 'Indigo nights, sakura', city: true, dark: true,  bg: '#0C0A1D', surface: '#15122C', surface2: '#1D193A', hair: '#29244E', hair2: '#3A3466', text: '#F4EFF9', text2: '#D0C7E1', muted: '#9C92B7' },
+  seoul:    { label: 'Seoul', note: 'Hanji paper and hills', city: true, dark: false, bg: '#F3EFE7', surface: '#FFFDF8', surface2: '#E9E2D5', hair: '#DCD2C1', hair2: '#C4B7A1', text: '#1A1B1E', text2: '#42454B', muted: '#5F6269' }
 };
 
 export const ACCENTS = {
@@ -19,10 +25,14 @@ export const ACCENTS = {
 };
 
 export const FONTS = {
-  classic:    { label: 'Classic', note: 'Bodoni & Garamond', sample: 'Aa' },
-  modern:     { label: 'Modern', note: 'DM Serif & DM Sans', sample: 'Aa' },
-  friendly:   { label: 'Friendly', note: 'Rounded Nunito', sample: 'Aa' },
-  typewriter: { label: 'Typewriter', note: 'Courier Prime', sample: 'Aa' }
+  classic:    { label: 'Classic', note: 'Bodoni & Garamond', family: "'Bodoni Moda', serif", weight: 600 },
+  modern:     { label: 'Modern', note: 'DM Serif & DM Sans', family: "'DM Serif Display', serif", weight: 400 },
+  friendly:   { label: 'Friendly', note: 'Rounded Nunito', family: "'Nunito', sans-serif", weight: 800 },
+  typewriter: { label: 'Typewriter', note: 'Courier Prime', family: "'Courier Prime', monospace", weight: 700 },
+  techy:      { label: 'Techy', note: 'Space Grotesk, mono clock', family: "'Space Grotesk', sans-serif", weight: 700 },
+  kids:       { label: 'Kids’ favourite', note: 'Round, bubbly Fredoka', family: "'Fredoka', sans-serif", weight: 600 },
+  formal:     { label: 'Formal', note: 'Engraved Cinzel', family: "'Cinzel', serif", weight: 600 },
+  noir:       { label: 'Classic noir', note: '1930s film posters', family: "'Limelight', serif", weight: 400 }
 };
 
 export const STYLES = {

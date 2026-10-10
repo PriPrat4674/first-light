@@ -45,6 +45,7 @@ public class FirstLightPlugin extends Plugin {
     private static FirstLightPlugin instance;
     private MediaPlayer preview;
 
+    // "owl" is the launcher entry that now shows the tiger-cub logo (name kept so updates keep your icon).
     static final String[] ICONS = { "sunrise", "crescent", "owl", "bell" };
 
     @Override
@@ -171,6 +172,8 @@ public class FirstLightPlugin extends Plugin {
                 .put("id", id).put("at", at)
                 .put("kind", call.getString("kind", "wake"))
                 .put("repeatDaily", Boolean.TRUE.equals(call.getBoolean("repeatDaily", false)));
+            if (call.getString("title") != null) a.put("title", call.getString("title"));
+            if (call.getString("text") != null) a.put("text", call.getString("text"));
             AlarmScheduler.schedule(getContext(), a);
             call.resolve();
         } catch (JSONException e) {
@@ -348,6 +351,36 @@ public class FirstLightPlugin extends Plugin {
         call.resolve();
     }
 
+    /* ---------------- links ---------------- */
+
+    /** Opens a link outside the app: spotify:… in the Spotify app, https:// in the app that owns it or the browser. */
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || !(url.startsWith("https://") || url.startsWith("spotify:"))) { call.reject("Unsupported link"); return; }
+        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        JSObject r = new JSObject();
+        try {
+            getContext().startActivity(i);
+            r.put("ok", true);
+        } catch (Exception e) {
+            if (url.startsWith("spotify:")) {
+                // No Spotify app: open the same thing on the web.
+                String[] parts = url.split(":");
+                String web = parts.length >= 3 ? "https://open.spotify.com/" + parts[1] + "/" + parts[2] : "https://open.spotify.com";
+                try {
+                    getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(web)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    r.put("ok", true);
+                } catch (Exception e2) {
+                    r.put("ok", false);
+                }
+            } else {
+                r.put("ok", false);
+            }
+        }
+        call.resolve(r);
+    }
+
     /* ---------------- launch info ---------------- */
 
     /** What opened the app: an alarm ({kind}) or a locked app ({lockedPkg, lockedLabel}). Cleared once read. */
@@ -369,6 +402,7 @@ public class FirstLightPlugin extends Plugin {
         if (launch.length() == 0) return;
         try {
             notifyListeners("launch", JSObject.fromJSONObject(launch), true);
+            Prefs.put(getContext(), Prefs.LAUNCH, new JSONObject()); // handled; don't deliver it twice
         } catch (JSONException ignored) {}
     }
 

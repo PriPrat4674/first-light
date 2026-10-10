@@ -23,7 +23,8 @@
     ring: () => { state.status.ringing = true; },
     stopRinging: () => { state.status.ringing = false; },
     lockNow: () => { state.status.lockedUntil = Date.now() + 3 * 3600e3; return { lockedUntil: state.status.lockedUntil }; },
-    unlock: () => { state.status.lockedUntil = 0; }
+    unlock: () => { state.status.lockedUntil = 0; },
+    openUrl: ({ url }) => { (window.__opened ||= []).push(url); return { ok: true }; }
   };
 
   const plugin = (name) => new Proxy({}, {
@@ -39,6 +40,17 @@
       };
     }
   });
-  window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', registerPlugin: plugin };
+  // Capacitor's native HTTP client, backed by fetch so tests can mock the network.
+  const CapacitorHttp = {
+    get: async ({ url, responseType }) => {
+      calls.push({ plugin: 'CapacitorHttp', method: 'get', args: { url } });
+      const r = await fetch(url);
+      const text = await r.text();
+      let data = text;
+      if (responseType === 'json') { try { data = JSON.parse(text); } catch {} }
+      return { status: r.status, data, url: r.url };
+    }
+  };
+  window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', registerPlugin: plugin, Plugins: { CapacitorHttp } };
   window.capacitorExports = { SystemBars: plugin('SystemBars') };
 })();

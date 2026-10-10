@@ -44,6 +44,10 @@ import * as sleepView from './ui/sleep-view.js';
 import * as applockView from './ui/applock-view.js';
 import * as onboarding from './ui/onboarding.js';
 import * as petView from './ui/pet-view.js';
+import * as appbar from './ui/appbar.js';
+import * as napView from './ui/nap-view.js';
+import * as shareView from './ui/share-view.js';
+import './features/places.js';
 
 theme.init();
 document.documentElement.classList.toggle('in-app', native.isNative());
@@ -55,6 +59,7 @@ on('storage:error', () => toast('Couldn’t save. Your phone’s storage may be 
 on('music:fallback', ({ source }) => toast(`${source === 'spotify' ? 'Spotify' : 'YouTube'} didn’t start, so your backup is playing.`, 5000));
 
 const section = (id) => $(`[data-tab="${id}"]`);
+appbar.mount($('#appbar'));
 home.mount(section('alarm'));
 if (!native.isNative()) install.mount(section('alarm'));
 tasksEditor.mount(section('tasks'));
@@ -66,6 +71,8 @@ morningView.mount($('#morning'));
 checkinView.mount($('#checkin'));
 boostView.mount($('#boost'));
 camera.mount($('#camera'));
+napView.mount($('#nap'));
+shareView.mount();
 sleepView.mountPrompts();
 applockView.mountBlocker();
 tabs.mount($('nav.tabs'));
@@ -90,6 +97,7 @@ tick();
 
 (async () => {
   await nativeSync.init();
-  if (!profile.get().onboarded) { await onboarding.run(); tabs.show('alarm'); }
-  else if (!morning.isActive()) await petView.greet();
+  if (!profile.get().onboarded) { await onboarding.run(); tabs.show('alarm'); petView.greet({ afterSetup: true }); }
+  else if (!morning.isActive()) petView.greet();
+  petView.watchReturns();
 })();

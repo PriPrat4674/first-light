@@ -78,6 +78,7 @@ public class AlarmService extends Service {
             case "checkin": title = "Still up? 👀"; text = "Tap to answer your check-in."; break;
             case "punish": title = "Round two ⏰"; text = "You missed your check-in."; break;
             case "snooze": title = "Snooze is over ☀️"; text = "Up you get. Tap to stop the alarm."; break;
+            case "nap": title = "Nap's over ☀️"; text = "Tap to get up. I'll log your nap."; break;
             default: title = "Good morning ☀️"; text = "Tap to stop the alarm. No easy way out."; break;
         }
         Notification.Builder b;
@@ -136,7 +137,7 @@ public class AlarmService extends Service {
 
     private File soundFileFor(String kind) {
         if ("punish".equals(kind)) return new File(getFilesDir(), "punish_song");
-        if ("checkin".equals(kind)) return null;
+        if ("checkin".equals(kind) || "nap".equals(kind)) return null; // naps use the alarm sound, not today's song
         return new File(getFilesDir(), "alarm_song");
     }
 

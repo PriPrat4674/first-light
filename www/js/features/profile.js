@@ -3,15 +3,16 @@ import { load, save } from '../core/storage.js';
 import { emit } from '../core/events.js';
 
 export const CHOICES = {
-  logo: ['sunrise', 'crescent', 'owl', 'bell'],
+  logo: ['sunrise', 'crescent', 'tiger', 'bell'],
   accent: ['gold', 'rose', 'sage', 'sky'],
-  theme: ['noir', 'ivory', 'midnight', 'dusk'],
-  font: ['classic', 'modern', 'friendly', 'typewriter'],
+  theme: ['noir', 'ivory', 'midnight', 'dusk', 'newyork', 'sanfrancisco', 'kerala', 'tokyo', 'seoul'],
+  font: ['classic', 'modern', 'friendly', 'typewriter', 'techy', 'kids', 'formal', 'noir'],
   style: ['elegant', 'soft', 'bold']
 };
 
 const DEFAULTS = { name: '', petName: 'Pip', logo: 'sunrise', accent: 'gold', theme: 'noir', font: 'classic', style: 'elegant', onboarded: false };
 let p = load('profile', DEFAULTS);
+if (p.logo === 'owl') p.logo = 'tiger'; // Pip used to be an owl
 // Repair anything unknown (e.g. data from an older version).
 for (const [k, list] of Object.entries(CHOICES)) if (!list.includes(p[k])) p[k] = DEFAULTS[k];
 

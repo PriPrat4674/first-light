@@ -31,6 +31,9 @@ public class AlarmReceiver extends BroadcastReceiver {
             case "asleep":
                 Notifier.asleepCheck(c);
                 break;
+            case "task":
+                Notifier.task(c, intent.getStringExtra(AlarmScheduler.EXTRA_TITLE), intent.getStringExtra(AlarmScheduler.EXTRA_TEXT));
+                break;
             default:
                 break;
         }

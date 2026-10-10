@@ -19,7 +19,7 @@ export function mount(el) {
     <div class="night-controls">
       <button class="btn line block" data-ref="back">Back to the app</button>
       <button class="btn quiet" data-ref="disarm" style="align-self:center">Disarm alarm</button>
-      <p class="tip">The alarm stays armed while you’re in the app.</p>
+      <p class="tip">Still armed 🌙</p>
     </div>`;
   r = refs(root);
   root.setAttribute('role', 'dialog');

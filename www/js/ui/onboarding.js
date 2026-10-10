@@ -10,15 +10,17 @@ import { stepperRow, wireSteppers } from './components.js';
 import { petMarkup } from './pet-view.js';
 import { logoSVG } from './art.js';
 import { artColours } from './theme.js';
+import { SLEEP_GOAL_LIMITS } from '../config.js';
+import { goalNote } from './sleep-view.js';
 
 const STEPS = ['name', 'logo', 'accent', 'theme', 'font', 'style', 'sleep', ...(native.isNative() ? ['permissions'] : []), 'done'];
 
 const TITLES = {
-  logo: ['Pick your logo', 'It’s what you’ll tap every night. Pick the one that feels like yours.'],
-  accent: ['Choose a colour', 'Your accent for buttons, highlights and the sunrise.'],
-  theme: ['Choose a theme', 'Noir is pure black, the kindest to your battery on most phones.'],
-  font: ['Choose a font', 'How your clock and words look.'],
-  style: ['Choose a style', 'The shape and feel of buttons and cards.']
+  logo: ['Pick your logo', 'You’ll tap it every night 🌙'],
+  accent: ['Pick a colour', 'For buttons and the sunrise ☀️'],
+  theme: ['Pick a theme', 'Cities come with live weather 🌦️'],
+  font: ['Pick a font', 'How your clock looks ⏰'],
+  style: ['Pick a style', 'Round, fine or bold?']
 };
 
 export function run() {
@@ -45,33 +47,34 @@ export function run() {
       if (step === 'name') {
         body = `
           <div class="ob-hero">${petMarkup('happy', 120)}</div>
-          <h1>Hi! I’m ${esc(p.petName)} 🦉</h1>
-          <p class="soft">I’ll get you out of bed and keep you out. First, what should I call you?</p>
+          <h1>Hi! I’m ${esc(p.petName)} 🐯</h1>
+          <p class="soft">I’ll get you up and keep you up. What’s your name?</p>
           <label class="field" style="margin-top:18px"><span>Your name</span><input type="text" data-ref="name" maxlength="24" autocomplete="given-name" value="${esc(p.name)}" placeholder="e.g. Priya"></label>
           ${nav('Next', { canSkip: true })}`;
       } else if (TITLES[step]) {
         const [t, sub] = TITLES[step];
         body = `<h1>${t}</h1><p class="soft">${sub}</p><div class="ob-picker">${picker(step)}</div>
-          ${step === 'logo' ? '<p class="small muted italic" style="margin-top:10px">In the Android app, your home-screen icon changes too.</p>' : ''}
+
           ${nav()}`;
       } else if (step === 'sleep') {
         const sc = sleep.get().schedule;
-        body = `<h1>Your sleep schedule</h1><p class="soft">I’ll nudge you at bedtime and track how long you sleep. No smartwatch needed 🌙</p>
+        body = `<h1>Your sleep</h1><p class="soft">I’ll nudge you at bedtime 🌙</p>
           <div class="card" data-sleep>
             <label class="time-pick"><span class="label">I usually sleep at</span><span class="value small-time" data-ref="bedShow">${esc(sc.bed)}</span><input type="time" data-ref="bed" value="${sc.bed}"></label>
             <label class="time-pick" style="margin-top:8px"><span class="label">and wake at</span><span class="value small-time" data-ref="wakeShow">${esc(sc.wake)}</span><input type="time" data-ref="wake" value="${sc.wake}"></label>
-            ${stepperRow({ key: 'goal', title: 'Sleep goal', desc: '7–9 hours is recommended for 18–25s', value: sc.goal, min: 6, max: 10, step: 0.5, unit: ' h' })}
+            ${stepperRow({ key: 'goal', title: 'Sleep goal', value: sc.goal, min: SLEEP_GOAL_LIMITS[0], max: SLEEP_GOAL_LIMITS[1], step: 0.5, unit: ' h' })}
+            <p class="small soft goal-note" data-ref="goalNote">${esc(goalNote(sc.goal))}</p>
           </div>
           ${nav()}`;
       } else if (step === 'permissions') {
-        body = `<h1>Let me ring with the app closed</h1><p class="soft">Android needs a few permissions so your alarm works even when your phone is locked.</p>
+        body = `<h1>Let me ring when I’m closed 🔔</h1><p class="soft">Tap each one. I’ll wait.</p>
           <div class="card" data-ref="perms"><p class="muted italic">Checking…</p></div>
           ${nav('Next', { canSkip: true })}`;
       } else if (step === 'done') {
         const c = artColours(p);
         body = `<div class="ob-hero">${petMarkup('ecstatic', 140)}</div>
           <h1>All set${p.name ? `, ${esc(p.name)}` : ''}! 🎉</h1>
-          <p class="soft">Your alarm is set for ${esc(sleep.get().schedule.wake)}. Arm it tonight, and I’ll see you in the morning ☀️</p>
+          <p class="soft">Alarm: ${esc(sleep.get().schedule.wake)}. Arm it tonight ☀️</p>
           <div class="ob-icon">${logoSVG(p.logo, c, { size: 76 })}<span class="small muted">Your icon</span></div>
           ${nav('Let’s go')}`;
       }
@@ -87,7 +90,7 @@ export function run() {
         const box = el.querySelector('[data-sleep]');
         r.bed.onchange = () => { const v = sleep.setSchedule({ bed: r.bed.value }); r.bedShow.textContent = v.bed; };
         r.wake.onchange = () => { const v = sleep.setSchedule({ wake: r.wake.value }); r.wakeShow.textContent = v.wake; };
-        wireSteppers(box, (k, v) => sleep.setSchedule({ goal: v }).goal);
+        wireSteppers(box, (k, v) => { const g = sleep.setSchedule({ goal: v }).goal; r.goalNote.textContent = goalNote(g); return g; });
       }
       if (step === 'permissions') paintPerms(r.perms);
       el.querySelector('[data-ob="back"]')?.addEventListener('click', () => go(-1));
@@ -97,12 +100,12 @@ export function run() {
 
     async function paintPerms(box) {
       const st = await native.status();
-      const row = (ok, title, desc, which) => `<div class="perm ${ok ? 'ok' : ''}"><span class="perm-dot">${ok ? '✓' : '!'}</span><span class="grow"><strong>${title}</strong><small>${desc}</small></span>${ok ? '' : `<button class="btn line" data-perm="${which}">Allow</button>`}</div>`;
+      const row = (ok, title, which) => `<div class="perm ${ok ? 'ok' : ''}"><span class="perm-dot">${ok ? '✓' : '!'}</span><span class="grow"><strong>${title}</strong></span>${ok ? '' : `<button class="btn line" data-perm="${which}">Allow</button>`}</div>`;
       box.innerHTML = [
-        row(st.notifications, 'Notifications', 'Bedtime nudges and check-ins', 'notifications'),
-        row(st.exactAlarms, 'Alarms & reminders', 'Ring at the exact minute', 'exactAlarm'),
-        row(st.fullScreen, 'Full-screen alarm', 'Show the alarm over your lock screen', 'fullScreen'),
-        row(st.batteryUnrestricted, 'Unrestricted battery', 'Stops some phones from delaying alarms', 'battery')
+        row(st.notifications, 'Nudge you', 'notifications'),
+        row(st.exactAlarms, 'Ring on time', 'exactAlarm'),
+        row(st.fullScreen, 'Wake your screen', 'fullScreen'),
+        row(st.batteryUnrestricted, 'Stay awake overnight', 'battery')
       ].join('');
       box.onclick = async (e) => {
         const b = e.target.closest('[data-perm]');

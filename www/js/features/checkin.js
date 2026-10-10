@@ -31,9 +31,10 @@ function clear() {
 
 on('morning:started', () => { open = false; st = { dueAt: null, passed: false }; commit(); });
 
-on('morning:dismissed', () => {
-  if (st.passed) return;
-  st.dueAt = Date.now() + cfg.delayMin * 60_000;
+on('morning:dismissed', (m) => {
+  if (st.passed || (m?.test && !m?.full)) return; // a quick test ends at the phrase
+  const speed = m?.speed || 1;
+  st.dueAt = Date.now() + Math.max(20_000, (cfg.delayMin * 60_000) / speed);
   commit();
   emit('checkin:scheduled', state());
 });

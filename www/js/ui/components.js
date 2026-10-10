@@ -80,6 +80,18 @@ export function seg(name, options, value) {
   return `<div class="seg" role="group" data-seg="${name}">${options.map((o) => `<button type="button" data-value="${o.value}" aria-pressed="${o.value === value}">${esc(o.label)}</button>`).join('')}</div>`;
 }
 
+// A small ⓘ button. Tapping it explains something in a sheet, so screens can stay short.
+export function info(title, text) {
+  return `<button type="button" class="info-btn" data-info="${esc(text)}" data-info-title="${esc(title)}" aria-label="About ${esc(title)}">i</button>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-info]');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  sheet({ title: b.dataset.infoTitle, body: esc(b.dataset.info), actions: [{ label: 'Got it', value: true, style: 'gold' }] });
+}, true);
+
 // Bottom sheet. Resolves with the chosen action's value, or null if dismissed.
 export function sheet({ title, body = '', actions = [] }) {
   return new Promise((resolve) => {

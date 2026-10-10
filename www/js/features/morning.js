@@ -22,15 +22,18 @@ export const phrase = () => (m?.escalated ? m.retryPhrase : m?.phrase);
 export function currentTask() {
   return m?.phase === 'tasks' ? m.tasks[m.completed.length] ?? null : null;
 }
+// When the current task can be proven: its wait counts from the previous task (or from stopping
+// the alarm, for the first one). A full test run goes 10× faster so you can try it in a minute or two.
 export function currentUnlocksAt() {
   const i = m.completed.length;
-  return tasks.unlocksAt(m.tasks[i], i ? m.completed[i - 1].at : 0);
+  const from = i ? m.completed[i - 1].at : m.dismissedAt || 0;
+  return from + (tasks.unlocksAt(m.tasks[i], 0)) / (m.speed || 1);
 }
 
-function start(test) {
+function start(test, { full = false } = {}) {
   if (isActive()) return false;
   m = {
-    date: dayKey(), test: !!test, startedAt: Date.now(), phase: 'ringing', rings: 0,
+    date: dayKey(), test: !!test, full: !!(test && full), speed: test && full ? 10 : 1, startedAt: Date.now(), phase: 'ringing', rings: 0,
     escalated: false, misses: 0, snoozes: 0, tasks: tasks.forToday(), completed: [],
     phrase: pick(DISMISS_PHRASES), retryPhrase: null
   };
@@ -58,10 +61,18 @@ export function dismiss(text) {
   if (m?.phase !== 'ringing' || !norm(text) || norm(text) !== norm(phrase())) return false;
   m.phase = 'tasks';
   m.escalated = false;
+  m.dismissedAt ??= Date.now();
   commit();
   emit('morning:dismissed', snapshot());
-  if (!m.tasks.length) finish(); else changed();
+  // A quick test stops right here: it only checks that the alarm rings and stops.
+  if (!m.tasks.length || (m.test && !m.full)) finish(); else changed();
   return true;
+}
+
+// "Try the full morning": a test that runs the tasks and check-in too, 10× faster.
+export function startFullTest() {
+  if (isActive()) return false;
+  return start(true, { full: true });
 }
 
 export const canSnooze = () => m?.phase === 'ringing' && !m.escalated && snoozeRules.canSnooze();
@@ -113,7 +124,7 @@ export function resume() {
   if (m.phase === 'ringing') { m.rings = Math.max(1, m.rings); ring(); } else changed();
 }
 
-on('alarm:fire', ({ test }) => start(test));
+on('alarm:fire', ({ test, full }) => start(test, { full }));
 
 on('snooze:ended', () => { if (m?.phase === 'snoozed') { m.snoozeUntil = null; ring(); } });
 

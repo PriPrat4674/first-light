@@ -27,9 +27,9 @@ WEB = ROOT / 'www'
 ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required']
 
 TESTS = []
-def test(group, kind, name):
+def test(group, kind, name, timeout=60):
     def deco(fn):
-        TESTS.append({'group': group, 'kind': kind, 'name': name, 'fn': fn})
+        TESTS.append({'group': group, 'kind': kind, 'name': name, 'fn': fn, 'timeout': timeout})
         return fn
     return deco
 
@@ -50,8 +50,9 @@ class App:
         self.ctx = None
         self.pg = None
 
-    async def open(self, *, battery=(0.82, False), clock=True, seed=None, deny_camera=False, spotify=None, youtube=None, sw='block', onboarded=True, native=None, greet=False, at=None):
-        self.ctx = await self.browser.new_context(viewport={'width': 390, 'height': 844}, service_workers=sw, timezone_id='Asia/Kolkata')
+    async def open(self, *, battery=(0.82, False), clock=True, seed=None, deny_camera=False, spotify=None, youtube=None, sw='block', onboarded=True, native=None, greet=False, at=None, net=None, viewport=None):
+        self.ctx = await self.browser.new_context(viewport=viewport or {'width': 390, 'height': 844}, service_workers=sw, timezone_id='Asia/Kolkata')
+        await self._route_net(net or {})
         seed = dict(seed or {})
         if onboarded and 'fl:profile' not in seed:
             seed['fl:profile'] = {'name': 'Priya', 'onboarded': True}
@@ -100,6 +101,31 @@ class App:
     async def close(self):
         if self.ctx:
             await self.ctx.close()
+
+    # -- City data stand-ins (weather, headlines, Wikipedia) ----------------
+    # net: {'weather': {...open-meteo json} | 'fail', 'news': [articles] | 'fail', 'wiki': {...} | 'fail'}
+    async def _route_net(self, net):
+        self.net_calls = []
+        weather = net.get('weather', {'utc_offset_seconds': 19800, 'current': {'temperature_2m': 27.4, 'weather_code': 61, 'is_day': 1}, 'daily': {'sunrise': ['2026-10-14T06:12'], 'sunset': ['2026-10-14T18:05']}})
+        news = net.get('news', [{'title': 'Man killed in road crash', 'url': 'https://news.example/a', 'domain': 'news.example'},
+                                 {'title': 'Kochi students win national robotics award - The Hindu', 'url': 'https://news.example/b', 'domain': 'news.example'}])
+        wiki = net.get('wiki', {'extract': 'Kathakali (Malayalam: x) is a major form of classical Indian dance. It is a story play genre.', 'content_urls': {'mobile': {'page': 'https://en.m.wikipedia.org/wiki/Kathakali'}}})
+        def handler(kind, data):
+            async def h(route):
+                self.net_calls.append((kind, route.request.url))
+                if data == 'fail': return await route.abort()
+                await route.fulfill(json=data if kind != 'news' else {'articles': data})
+            return h
+        await self.ctx.route('https://api.open-meteo.com/**', handler('weather', weather))
+        await self.ctx.route('https://api.gdeltproject.org/**', handler('news', news))
+        await self.ctx.route('https://en.wikipedia.org/**', handler('wiki', wiki))
+        await self.ctx.route('https://spotify.link/**', lambda r: r.abort())
+        await self.ctx.route('https://open.spotify.com/oembed**', lambda r: r.fulfill(json={'title': 'Rise and Grind'}))
+        await self.ctx.add_init_script(f"window.__spEmbedMode = {json.dumps(net.get('spembed', 'ok'))};")
+        await self.ctx.route('https://open.spotify.com/embed/iframe-api/v1', lambda r: r.fulfill(path=str(MOCKS / 'spotify-embed.js'), content_type='text/javascript'))
+        # Embedded players (YouTube Shorts, Instagram reels) load as blank pages in tests.
+        await self.ctx.route('https://www.youtube.com/embed/**', lambda r: r.fulfill(body='<html><body>YouTube clip</body></html>', content_type='text/html'))
+        await self.ctx.route('https://www.instagram.com/**', lambda r: r.fulfill(body='<html><body>Instagram reel</body></html>', content_type='text/html'))
 
     # -- Spotify stand-in -------------------------------------------------
     async def _route_spotify(self):
@@ -154,21 +180,41 @@ class App:
         c = await self.pg.evaluate('window.__nativeCalls || []')
         return [x for x in c if method is None or x['method'] == method]
 
-    async def tick(self, ms):
-        await self.pg.clock.run_for(ms)
+    async def jump(self, ms):
+        # Big leaps in time: due timers fire once instead of every second along the way.
+        await self.pg.clock.fast_forward(int(ms))
+        await self.pg.clock.run_for(1100)
         await self.pg.wait_for_timeout(150)
 
-    async def tab(self, name):
+    async def tick(self, ms):
+        await self.pg.clock.run_for(int(ms))
+        await self.pg.wait_for_timeout(150)
+
+    async def tab(self, name, group=None):
+        if name == 'settings':
+            # Settings now opens from the ☰ menu one group at a time; with no group, show every card.
+            if group:
+                await self.menu(group)
+            else:
+                await self.js('ui/tabs.js', "m.show('settings')")
+                await self.pg.wait_for_timeout(200)
+            return
         await self.pg.click(f'[data-go={name}]')
         await self.pg.wait_for_timeout(200)
+
+    async def menu(self, group):
+        await self.pg.click('#appbar [data-ref=menu]')
+        await self.pg.wait_for_timeout(150)
+        await self.pg.click(f'.drawer [data-group-go={group}]')
+        await self.pg.wait_for_timeout(250)
 
     async def fire_test_alarm(self):
         await self.pg.click('[data-ref=test]')
         await self.tick(11_000)
         await self.pg.wait_for_timeout(300)
 
-    async def fire_direct(self, test=True):
-        await self.js('core/events.js', f"m.emit('alarm:fire', {{ test: {str(test).lower()} }})")
+    async def fire_direct(self, test=False, full=False):
+        await self.js('core/events.js', f"m.emit('alarm:fire', {{ test: {str(test).lower()}, full: {str(full).lower()} }})")
         await self.pg.wait_for_timeout(400)
 
     async def phrase(self):
@@ -212,20 +258,38 @@ ONE_TASK = [{'id': 'only', 'name': 'Drink water', 'proof': 'a glass of water', '
 
 # ================================================================== tests
 # ---------- App shell
-@test('App', 'valid', 'Loads with no errors, correct title and five tabs')
+@test('App', 'valid', 'Loads with no errors, correct title, four everyday tabs and a ☰ menu')
 async def t_shell(a):
     pg = await a.open()
     check(await pg.title() == 'First Light', 'title should be First Light')
-    check(len(await pg.query_selector_all('nav.tabs [data-go]')) == 5, 'expected 5 tabs')
+    labels = await pg.eval_on_selector_all('nav.tabs [data-go]', 'els => els.map(e => e.innerText.trim())')
+    check(labels == ['Alarm', 'Tasks', 'Music', 'Progress'], f'bottom tabs {labels}')
+    check(await a.visible('#appbar [data-ref=menu]'), 'menu button in the top bar')
 
-@test('App', 'valid', 'Every tab opens and shows its heading')
+@test('App', 'valid', 'Every tab opens and the top bar names it')
 async def t_tabs(a):
     pg = await a.open()
-    for tab, head in [('tasks', 'Morning tasks'), ('sounds', 'Sounds'), ('settings', 'Settings')]:
+    for tab, head in [('tasks', 'Morning tasks'), ('sounds', 'Music'), ('progress', 'Progress'), ('alarm', 'First Light')]:
         await a.tab(tab)
-        check(head in await pg.inner_text(f'[data-tab={tab}] h1'), f'{tab} heading')
-    await a.tab('progress')
+        check(head == await pg.inner_text('#appbar .ab-title'), f'{tab} title')
     check('mornings proven in a row' in await pg.inner_text('[data-tab=progress]'), 'progress caption')
+
+@test('App', 'valid', '☰ menu opens each settings group on its own page; Back returns; Escape closes the menu')
+async def t_menu(a):
+    pg = await a.open()
+    await a.tab('tasks')
+    groups = await a.js('ui/drawer.js', 'm.GROUPS.map(g => [g.id, g.title, g.cards])')
+    check(len(groups) >= 9, f'menu items {groups}')
+    for gid, title, cards in groups:
+        await a.menu(gid)
+        check(await pg.inner_text('#appbar .ab-title') == title, f'{gid} title')
+        shown = await pg.eval_on_selector_all('[data-tab=settings] [data-group]', 'els => els.map(e => e.dataset.group)')
+        check(shown == cards, f'{gid} shows only its cards: {shown}')
+    await pg.click('[data-tab=settings] [data-ref=back]'); await pg.wait_for_timeout(200)
+    check(await pg.is_visible('[data-tab=tasks]'), 'Back returns to the last tab')
+    await pg.click('#appbar [data-ref=menu]'); await pg.wait_for_timeout(100)
+    await pg.keyboard.press('Escape'); await pg.wait_for_timeout(100)
+    check(not await pg.query_selector('.drawer'), 'Escape closes the menu')
 
 @test('App', 'valid', 'Classic fonts are bundled and load offline (Bodoni Moda, EB Garamond)')
 async def t_fonts(a):
@@ -238,7 +302,7 @@ async def t_a11y(a):
     pg = await a.open()
     for tab in ['alarm', 'tasks', 'sounds', 'progress', 'settings']:
         await a.tab(tab)
-        bad = await pg.evaluate("() => [...document.querySelectorAll('main button, nav button')].filter(b => b.offsetParent && !(b.innerText.trim() || b.getAttribute('aria-label'))).map(b => b.outerHTML.slice(0, 80))")
+        bad = await pg.evaluate("() => [...document.querySelectorAll('main button, nav button, #appbar button')].filter(b => b.offsetParent && !(b.innerText.trim() || b.getAttribute('aria-label'))).map(b => b.outerHTML.slice(0, 80))")
         check(not bad, f'unnamed buttons on {tab}: {bad}')
 
 @test('App', 'invalid', 'Corrupted saved data falls back to defaults instead of crashing')
@@ -684,7 +748,7 @@ async def t_cam_cancel(a):
 @test('Progress', 'valid', 'Finishing shows the report card; a test run doesn’t touch the streak')
 async def t_report(a):
     pg = await a.open(seed={'fl:tasks': ONE_TASK})
-    await a.fire_direct(test=True); await a.type_phrase(); await a.prove_current_task()
+    await a.fire_direct(test=True, full=True); await a.type_phrase(); await a.prove_current_task()
     txt = await pg.inner_text('#morning')
     check('Morning proven' in txt and 'A+' in txt, 'report card A+')
     check(await a.js('features/stats.js', 'm.get().wins') == 0, 'test not counted')
@@ -818,14 +882,18 @@ async def t_clips(a):
 # ---------- Spotify (stand-in)
 CONNECTED = {'fl:music': {'source': 'spotify'}, 'fl:spotify': {'clientId': 'a' * 32, 'token': {'access': 'ACCESS-ok', 'refresh': 'REFRESH', 'expiresAt': 4102444800000}, 'playlist': {'id': 'pl1', 'name': 'Rise and shine', 'uri': 'spotify:playlist:pl1', 'total': 7}, 'user': {'name': 'Test User'}, 'lastError': None}, 'fl:tasks': []}
 
-@test('Spotify', 'invalid', 'Client ID: wrong format refused with an explanation, correct one saved')
+@test('Spotify', 'valid', 'No Client ID to type: “Connect Spotify” appears only when the app has its own Spotify ID')
 async def t_sp_client(a):
     pg = await a.open(spotify={})
     await a.tab('sounds'); await pg.click('[data-seg=source] [data-value=spotify]')
-    await pg.fill('[data-ref=cid]', 'not-a-client-id'); await pg.click('[data-ref=save]')
-    check('32 letters' in await pg.inner_text('[data-ref=err]'), 'error explained')
-    await pg.fill('[data-ref=cid]', '0123456789abcdef0123456789ABCDEF'); await pg.click('[data-ref=save]'); await pg.wait_for_timeout(200)
-    check('Connect Spotify' in await pg.inner_text('[data-tab=sounds]'), 'moves to the connect step')
+    text = await pg.inner_text('[data-tab=sounds]')
+    check(not await pg.query_selector('[data-ref=cid]'), 'no Client ID field anywhere')
+    built_in = await a.js('config.js', 'm.SPOTIFY_CLIENT_ID')
+    check(('Connect Spotify' in text) == bool(built_in), 'Connect button follows the built-in ID')
+    check('Share → First Light' in text, 'share-a-playlist route explained')
+    await a.js('features/sources/spotify.js', "m.setClientId('0123456789abcdef0123456789ABCDEF')")
+    await pg.wait_for_timeout(200)
+    check('Connect Spotify' in await pg.inner_text('[data-tab=sounds]'), 'Connect appears once an ID is configured')
 
 @test('Spotify', 'valid', 'Connect: secure sign-in (PKCE), token saved, playlists listed and chosen')
 async def t_sp_connect(a):
@@ -1004,7 +1072,7 @@ async def t_onboard(a):
     pg = await a.open(onboarded=False, clock=False)
     check(await a.visible('#onboarding'), 'setup shown on first run')
     await pg.fill('#onboarding [data-ref=name]', 'Priya'); await pg.click('[data-ob=next]')
-    for kind, value in [('logo', 'owl'), ('accent', 'rose'), ('theme', 'midnight'), ('font', 'modern'), ('style', 'soft')]:
+    for kind, value in [('logo', 'tiger'), ('accent', 'rose'), ('theme', 'midnight'), ('font', 'modern'), ('style', 'soft')]:
         await pg.click(f'[data-pick={kind}][data-value={value}]'); await pg.wait_for_timeout(120)
         check(await pg.evaluate(f"document.documentElement.dataset.{kind if kind != 'logo' else 'theme'} !== undefined"), 'applied live')
         await pg.click('[data-ob=next]'); await pg.wait_for_timeout(150)
@@ -1015,7 +1083,7 @@ async def t_onboard(a):
     await pg.click('[data-ob=next]'); await pg.wait_for_timeout(500)
     check(not await a.visible('#onboarding'), 'setup closes')
     p = await a.js('features/profile.js', 'm.get()')
-    check(p['name'] == 'Priya' and p['logo'] == 'owl' and p['accent'] == 'rose' and p['theme'] == 'midnight' and p['font'] == 'modern' and p['style'] == 'soft' and p['onboarded'], f'profile {p}')
+    check(p['name'] == 'Priya' and p['logo'] == 'tiger' and p['accent'] == 'rose' and p['theme'] == 'midnight' and p['font'] == 'modern' and p['style'] == 'soft' and p['onboarded'], f'profile {p}')
     check(await a.js('features/alarm.js', 'm.status().time') == '05:45', 'alarm set to the wake-up time')
     check(await a.js('features/sleep.js', 'm.get().schedule.bed') == '23:30', 'bedtime saved')
     await pg.reload(); await pg.wait_for_timeout(500)
@@ -1039,6 +1107,22 @@ async def t_name_clean(a):
     check(r[1] == 'Pip', 'blank pet name falls back to Pip')
     check(r[2] == '', 'empty name allowed')
 
+@test('Pip', 'valid', 'Pip is a tiger cub: every pose has artwork, the old Owl logo becomes Tiger (same home-screen icon)')
+async def t_tiger(a):
+    pg = await a.open(seed={'fl:profile': {'name': 'Priya', 'onboarded': True, 'logo': 'owl'}}, native={})
+    check(await a.js('features/profile.js', 'm.get().logo') == 'tiger', 'owl logo migrated to tiger')
+    poses = await a.js('config.js', 'm.PIP_ART')
+    for pose in poses:
+        ok = await pg.evaluate(f"new Promise(r => {{ const i = new Image(); i.onload = () => r(i.naturalWidth); i.onerror = () => r(0); i.src = 'img/pip/{pose}.webp'; }})")
+        check(ok == 512, f'{pose} artwork loads ({ok})')
+    check(await pg.query_selector('.pet-card img.pet-img'), 'the Alarm tab shows the cub artwork')
+    check('owl' not in (await pg.inner_text('body')).lower() and '🦉' not in await pg.inner_text('body'), 'no owl left anywhere')
+    await a.tab('settings', 'look')
+    await pg.click('[data-pick=logo][data-value=bell]'); await pg.wait_for_timeout(100)
+    await pg.click('[data-pick=logo][data-value=tiger]'); await pg.wait_for_timeout(100)
+    icons = [c['args']['name'] for c in await first_light(a, 'setIcon')]
+    check(icons[-1] == 'owl', f'tiger uses the existing launcher entry: {icons}')
+
 @test('Onboarding', 'invalid', 'Unknown look choices are refused; corrupted profile is repaired')
 async def t_profile_invalid(a):
     await a.open(seed={'fl:profile': {'name': 'X', 'onboarded': True, 'theme': 'neon', 'font': 'comic-sans'}})
@@ -1048,13 +1132,13 @@ async def t_profile_invalid(a):
     check(r == [None, None, None], f'refused {r}')
 
 # ---------- Personalisation
-@test('Look & feel', 'valid', 'All 768 combinations (4 logos × 4 colours × 4 themes × 4 fonts × 3 styles) apply and stay readable')
+@test('Look & feel', 'valid', 'All 3,456 combinations (4 logos × 4 colours × 9 themes × 8 fonts × 3 styles) apply and stay readable')
 async def t_all_combos(a):
     pg = await a.open(clock=False)
     res = await pg.evaluate("""async () => {
       const prof = await import('./js/features/profile.js'); const th = await import('./js/ui/theme.js'); const art = await import('./js/ui/art.js');
       const C = prof.CHOICES; const fails = []; let n = 0; const minC = {};
-      const FAM = { classic: 'Bodoni Moda', modern: 'DM Serif Display', friendly: 'Nunito', typewriter: 'Courier Prime' };
+      const FAM = { classic: 'Bodoni Moda', modern: 'DM Serif Display', friendly: 'Nunito', typewriter: 'Courier Prime', techy: 'JetBrains Mono', kids: 'Fredoka', formal: 'Cinzel', noir: 'Limelight' };
       const RAD = { elegant: '12px', soft: '999px', bold: '6px' };
       const btn = document.querySelector('.btn.line, .btn.gold'); const h1 = document.querySelector('h1') || document.querySelector('.home-hero .clock');
       const note = (k, v) => { if (!(k in minC) || v < minC[k]) minC[k] = Math.round(v * 100) / 100; };
@@ -1073,7 +1157,7 @@ async def t_all_combos(a):
       }
       return { n, fails: [...new Set(fails)].slice(0, 15), minC };
     }""")
-    check(res['n'] == 768, f"ran {res['n']} combinations")
+    check(res['n'] == 3456, f"ran {res['n']} combinations")
     check(not res['fails'], f"problems: {res['fails']}")
 
 @test('Look & feel', 'valid', 'Every bundled font file loads')
@@ -1081,7 +1165,9 @@ async def t_fonts_all(a):
     pg = await a.open(clock=False)
     r = await pg.evaluate("""async () => {
       const specs = ['500 20px "Bodoni Moda"', '600 20px "Bodoni Moda"', '700 20px "Bodoni Moda"', 'italic 500 20px "Bodoni Moda"', '400 18px "EB Garamond"', 'italic 400 18px "EB Garamond"', '600 18px "EB Garamond"',
-        '400 20px "DM Serif Display"', '400 18px "DM Sans"', '700 18px "DM Sans"', '400 18px "Nunito"', '800 18px "Nunito"', '400 18px "Courier Prime"', '700 18px "Courier Prime"'];
+        '400 20px "DM Serif Display"', '400 18px "DM Sans"', '700 18px "DM Sans"', '400 18px "Nunito"', '800 18px "Nunito"', '400 18px "Courier Prime"', '700 18px "Courier Prime"',
+        '400 18px "Space Grotesk"', '700 18px "Space Grotesk"', '500 18px "JetBrains Mono"', '400 18px "Fredoka"', '600 18px "Fredoka"', '600 18px "Cinzel"',
+        '500 18px "Cormorant Garamond"', '600 18px "Cormorant Garamond"', 'italic 500 18px "Cormorant Garamond"', '400 18px "Limelight"', '400 18px "Josefin Sans"', '600 18px "Josefin Sans"'];
       const out = {}; for (const sp of specs) out[sp] = (await document.fonts.load(sp)).length; return out; }""")
     bad = [k for k, v in r.items() if v == 0]
     check(not bad, f'fonts not loading: {bad}')
@@ -1120,7 +1206,7 @@ async def t_msg_vary(a):
       hello: [2, 9, 14, 19, 23].map((h) => m.greeting('Priya', h))
     })""")
     check(r['days'] >= 2, 'varies day to day')
-    check('🦉' in r['owl'] or 'Legendary' in r['owl'] or 'Bold' in r['owl'], f"very early line {r['owl']}")
+    check('🐯' in r['owl'] or 'Legendary' in r['owl'] or 'Bold' in r['owl'], f"very early line {r['owl']}")
     check('Streak: 5 🔥' in r['streak'], 'streak mentioned')
     check(isinstance(r['junk'], str) and len(r['junk']) > 5, 'bad input still gives a message')
     check(r['hello'][1].startswith('Good morning, Priya') and r['hello'][3].startswith('Good evening') and 'late' in r['hello'][0].lower(), f"greetings {r['hello']}")
@@ -1152,7 +1238,7 @@ async def t_pet_grumpy(a):
     await pg.click('.pet-card .pet-hit'); await pg.wait_for_timeout(100)
     check(await pg.inner_text('.pet-card .bubble p') != before, 'poke gives a new line')
 
-@test('Pip', 'valid', 'Opening the app: Pip flies in with “Good morning, Priya”, then the app appears; tap skips')
+@test('Pip', 'valid', 'Opening the app: Pip leaps in with “Good morning, Priya”, then the app appears; tap skips')
 async def t_greet(a):
     pg = await a.open(greet=True, at=ms(ist(2026, 10, 14, 9)))
     check('Good morning, Priya' in await pg.inner_text('.greet'), 'greeting shown')
@@ -1186,7 +1272,7 @@ async def t_recovery(a):
     await pg.click('.recovery [data-tip=stairs]'); await pg.wait_for_timeout(100)
     check('1/7' in await pg.inner_text('.recovery'), 'progress updates')
     await pg.click('.recovery [data-open=coffee]'); await pg.wait_for_timeout(100)
-    href = await pg.get_attribute('.recovery .why a', 'href')
+    href = await pg.get_attribute('.recovery .why [data-url]', 'data-url')
     check(href and href.startswith('https://'), 'source link shown')
     await pg.reload(); await pg.wait_for_timeout(400); await pg.evaluate("document.querySelector('.greet')?.remove()")
     check('1/7' in await pg.inner_text('.recovery'), 'ticks saved')
@@ -1200,11 +1286,23 @@ async def t_sleep_invalid(a):
     await a.tab('alarm')
     check(not await a.visible('.recovery'), 'no plan after 8 h')
 
-@test('Sleep', 'invalid', 'Schedule rejects bad times and keeps the goal between 6 and 10 h')
+@test('Sleep', 'invalid', 'Schedule rejects bad times; the goal can go as low as 1 h (never 0 or negative) and up to 12 h')
 async def t_sleep_schedule(a):
     await a.open(seed=NO_PROMPTS)
-    r = await a.js('features/sleep.js', "[m.setSchedule({ bed: '25:00' }).bed, m.setSchedule({ wake: 'soon' }).wake, m.setSchedule({ goal: 12 }).goal, m.setSchedule({ goal: 3 }).goal, m.setSchedule({ goal: 7.3 }).goal, m.setSchedule({ goal: 'x' }).goal]")
-    check(r == ['23:00', '06:30', 10, 6, 7.5, 7.5], f'schedule {r}')
+    r = await a.js('features/sleep.js', "[m.setSchedule({ bed: '25:00' }).bed, m.setSchedule({ wake: 'soon' }).wake, m.setSchedule({ goal: 14 }).goal, m.setSchedule({ goal: 3 }).goal, m.setSchedule({ goal: 7.3 }).goal, m.setSchedule({ goal: 'x' }).goal, m.setSchedule({ goal: -4 }).goal, m.setSchedule({ goal: 0 }).goal, m.setSchedule({ goal: null }).goal, m.setSchedule({ goal: 4.5 }).goal]")
+    check(r == ['23:00', '06:30', 12, 3, 7.5, 7.5, 1, 1, 1, 4.5], f'schedule {r}')
+
+@test('Sleep', 'valid', 'Sleep goal stepper goes down to 1 h in Settings, with a kind note under 5 h; a 4 h night on a 4 h goal counts as rested')
+async def t_sleep_goal_low(a):
+    pg = await a.open(seed=NO_PROMPTS)
+    await a.tab('settings', 'sleep')
+    for _ in range(20):
+        await pg.click('[data-stepper=goal] [data-d="-1"]', force=True)
+    check(await a.js('features/sleep.js', 'm.get().schedule.goal') == 1, 'stops at 1 h')
+    check(await pg.is_disabled('[data-stepper=goal] [data-d="-1"]'), 'minus disabled at 1 h')
+    check('tough schedule' in await pg.inner_text('[data-ref=goalNote]'), 'kind note for a low goal')
+    r = await a.js('features/sleep.js', "[m.classify(4, 4).key, m.classify(3.6, 4).key, m.classify(2.5, 4).key]")
+    check(r == ['good', 'bit-short', 'short'], f'classified against a low goal: {r}')
 
 @test('Sleep', 'valid', 'Bedtime nudge: “In 30 minutes” reminds you; “Going to sleep” then a gentle “still awake?”')
 async def t_bedtime_flow(a):
@@ -1424,7 +1522,7 @@ async def t_native_onboard(a):
         if await pg.query_selector('[data-ob=skip]') and 'name' in (await pg.get_attribute('.ob-step', 'data-step')): await pg.click('[data-ob=skip]')
         else: await pg.click('[data-ob=next]')
         await pg.wait_for_timeout(200)
-    check('ring with the app closed' in await pg.inner_text('#onboarding'), 'permissions step')
+    check('Let me ring when I’m closed' in await pg.inner_text('#onboarding'), 'permissions step')
     await pg.wait_for_timeout(300)
     await pg.click('[data-perm=notifications]'); await pg.wait_for_timeout(300)
     check(await first_light(a, 'requestNotifications'), 'asked for notifications')
@@ -1503,12 +1601,398 @@ async def t_one_toast(a):
 @test('Android', 'valid', 'The permission warning clears once setup granted everything')
 async def t_native_warning_clears(a):
     pg = await a.open(native={'status': {'notifications': False}}, onboarded=False, clock=False)
-    while await pg.query_selector('#onboarding'):
+    while await pg.query_selector('#onboarding:not(.leaving) [data-ob=next]'):
         step = await pg.get_attribute('.ob-step', 'data-step')
         if step == 'permissions': await pg.click('[data-perm=notifications]'); await pg.wait_for_timeout(1000)
-        await pg.click('[data-ob=next]'); await pg.wait_for_timeout(250)
+        await pg.click('#onboarding:not(.leaving) [data-ob=next]'); await pg.wait_for_timeout(250)
     await pg.wait_for_timeout(500)
     check(not await a.visible('[data-ref=permWarn]'), 'no stale warning')
+
+# ================================================================== 3.1
+SP_LINK = 'https://open.spotify.com/playlist/37i9dQZF1DX0UrRvztWcAU?si=abc123'
+KERALA = {'fl:profile': {'name': 'Priya', 'onboarded': True, 'theme': 'kerala'}, 'fl:sleep': {'prompts': False}}
+
+async def set_visibility(a, state):
+    await a.pg.evaluate(f"""() => {{ Object.defineProperty(document, 'visibilityState', {{ configurable: true, get: () => '{state}' }});
+      Object.defineProperty(document, 'hidden', {{ configurable: true, get: () => {str(state == 'hidden').lower()} }});
+      document.dispatchEvent(new Event('visibilitychange')); }}""")
+
+# ---------- City themes
+@test('Cities', 'valid', 'Kerala theme: skyline, live weather, and an upbeat headline (gloomy news is skipped)')
+async def t_city_card(a):
+    pg = await a.open(seed=KERALA, at=ms(ist(2026, 10, 14, 7)))
+    await a.tick(1500)
+    card = await pg.inner_text('.city-card')
+    check('Kerala' in card and '27°' in card and 'Rain' in card, f'city card {card!r}')
+    check('killed' not in card.lower(), 'gloomy headline skipped')
+    check(await pg.query_selector('.scene.city-kerala .skyline'), 'Kerala skyline drawn')
+    check(await pg.query_selector('.scene .fx-rain'), 'rain in the sky when it rains there')
+    kinds = {k for k, _ in a.net_calls}
+    check({'weather', 'news', 'wiki'} <= kinds, f'all three sources asked: {kinds}')
+    first = await pg.inner_text('.city-line')
+    await pg.click('.city-card [data-ref=swap]'); await pg.wait_for_timeout(100)
+    second = await pg.inner_text('.city-line')
+    check(first != second and ('robotics award' in first + second) and ('Kathakali' in first + second), f'headline and fact alternate: {first!r} / {second!r}')
+    await pg.click('.city-card [data-ref=swap]'); await pg.wait_for_timeout(100)
+
+@test('Cities', 'invalid', 'Offline or blocked: the city card still shows a built-in fact, with no errors')
+async def t_city_offline(a):
+    pg = await a.open(seed={**KERALA, 'fl:profile': {**KERALA['fl:profile'], 'theme': 'tokyo'}}, net={'weather': 'fail', 'news': 'fail', 'wiki': 'fail'}, at=ms(ist(2026, 10, 14, 7)))
+    await a.tick(1500)
+    card = await pg.inner_text('.city-card')
+    facts = await a.js('features/places.js', 'm.PLACES.tokyo.facts')
+    check('Tokyo' in card and any(f in card for f in facts), f'offline fact shown: {card!r}')
+    check(not await pg.query_selector('.city-card .wx'), 'no made-up weather')
+
+@test('Cities', 'invalid', 'Only upbeat, well-formed headlines are used; titles are cleaned')
+async def t_city_headlines(a):
+    await a.open()
+    r = await a.js('features/places.js', """[m.isUpbeat('Fire breaks out in market'), m.isUpbeat('Local choir wins national prize'), m.cleanHeadline('BIG NEWS FOR KOCHI METRO RIDERS - The Hindu'), m.firstSentence('Kathakali (Malayalam: x) is a major form of classical Indian dance. It is a story play.')]""")
+    check(r[0] is False and r[1] is True, f'tone filter {r[:2]}')
+    check(r[2] == 'Big news for kochi metro riders', f'cleaned {r[2]!r}')
+    check(r[3] == 'Kathakali is a major form of classical Indian dance.', f'first sentence {r[3]!r}')
+
+@test('Cities', 'valid', 'In the app, city data goes through Android’s own HTTP client; tapping the headline opens it outside the app')
+async def t_city_native(a):
+    pg = await a.open(seed=KERALA, native={}, at=ms(ist(2026, 10, 14, 8)))
+    await a.tick(1500)
+    http = [c['args']['url'] for c in await a.native_calls('get') if c['plugin'] == 'CapacitorHttp']
+    check(any('gdeltproject' in u for u in http) and any('open-meteo' in u for u in http), f'native HTTP used: {http}')
+    if not await pg.query_selector('.city-card [data-open^="https://news"]'):
+        await pg.click('.city-card [data-ref=swap]'); await pg.wait_for_timeout(100)
+    await pg.click('.city-card [data-open]'); await pg.wait_for_timeout(100)
+    opened = await pg.evaluate('window.__opened || []')
+    check(opened and opened[0].startswith('https://'), f'opened outside: {opened}')
+
+@test('Cities', 'valid', 'Every city has its own skyline and palette; the theme picker groups Moods and Cities')
+async def t_city_picker(a):
+    pg = await a.open()
+    await a.tab('settings', 'look')
+    groups = await pg.eval_on_selector_all('[data-group=look] .pick-group', 'els => els.map(e => e.innerText)')
+    check(len(groups) == 2 and groups[0].startswith('Moods') and groups[1].startswith('Cities'), f'groups {groups}')
+    for city in ['newyork', 'sanfrancisco', 'kerala', 'tokyo', 'seoul']:
+        check(await pg.query_selector(f'[data-pick=theme][data-value={city}] .mini-city'), f'{city} preview skyline')
+        await pg.click(f'[data-pick=theme][data-value={city}]'); await pg.wait_for_timeout(150)
+        await a.tab('alarm')
+        check(await pg.query_selector(f'.scene.city-{city} .skyline'), f'{city} skyline on the Alarm tab')
+        await a.tab('settings', 'look')
+
+# ---------- Sky
+@test('Sky', 'valid', 'The home sky follows the clock: stars at night, first rays at dawn, full sun at noon, orange glow at golden hour')
+async def t_sky_phases(a):
+    pg = await a.open(at=ms(ist(2026, 10, 14, 3)))
+    async def state():
+        return await pg.evaluate("() => { const s = document.querySelector('.home-hero .scene'); return { phase: s.dataset.phase, stars: s.querySelectorAll('.star').length, moon: !!s.querySelector('.moon'), lit: s.querySelectorAll('.ray.lit').length, warm: s.querySelectorAll('.ray.lit.warm').length }; }")
+    st = await state()
+    check(st['phase'] == 'night' and st['stars'] > 20 and st['moon'] and st['lit'] == 0, f'night {st}')
+    await a.jump(3 * 3600e3 + 20 * 60e3)   # 06:20
+    st = await state()
+    check(st['phase'] == 'dawn' and 0 < st['lit'] < 12, f'dawn {st}')
+    await a.jump(6 * 3600e3)               # 12:20
+    st = await state()
+    check(st['phase'] == 'noon' and st['lit'] >= 30, f'noon {st}')
+    await a.jump(5 * 3600e3 + 40 * 60e3)   # 18:00
+    st = await state()
+    check(st['phase'] == 'golden' and st['warm'] > 0, f'golden {st}')
+    await a.jump(3 * 3600e3)               # 21:00
+    check((await state())['phase'] == 'night', 'night again')
+
+@test('Sky', 'valid', 'City weather shows in the sky: fog in San Francisco, snow in Seoul, clouds in Tokyo')
+async def t_sky_weather(a):
+    for theme, code, fx in [('sanfrancisco', 45, 'fx-fog'), ('seoul', 71, 'fx-snow'), ('tokyo', 3, 'fx-cloud'), ('newyork', 95, 'fx-flash')]:
+        b = App(a.browser)
+        try:
+            pg = await b.open(seed={'fl:profile': {'name': 'P', 'onboarded': True, 'theme': theme}}, net={'weather': {'utc_offset_seconds': 0, 'current': {'temperature_2m': 9, 'weather_code': code, 'is_day': 1}, 'daily': {'sunrise': ['2026-10-14T06:00'], 'sunset': ['2026-10-14T18:00']}}}, at=ms(ist(2026, 10, 14, 9)))
+            await b.tick(1500)
+            check(await pg.query_selector(f'.home-hero .scene .{fx}'), f'{theme}: {fx}')
+            check(not b.errors, f'{theme}: {b.errors}')
+        finally:
+            await b.close()
+
+# ---------- Pip
+@test('Pip', 'valid', 'Pip really leaps in: he bounds along a curved path, lands, waves and says hello')
+async def t_pip_flight(a):
+    pg = await a.open(greet=True, at=ms(ist(2026, 10, 14, 9)))
+    check(await pg.query_selector('.greet .pet.flying'), 'mid-leap')
+    p0 = await pg.evaluate("getComputedStyle(document.querySelector('.greet-pet')).transform")
+    await a.tick(400)
+    p1 = await pg.evaluate("getComputedStyle(document.querySelector('.greet-pet')).transform")
+    check(p0 != p1, 'he moves along his path')
+    await a.tick(800)
+    check(await pg.query_selector('.greet.landed .pet.waving'), 'lands and waves')
+    check('Good morning, Priya' in await pg.inner_text('.greet-text'), 'says hello by name')
+
+@test('Pip', 'valid', 'Pip leaps in after setup, when you come back after 30+ minutes, and does a victory lap after a proven morning')
+async def t_pip_triggers(a):
+    pg = await a.open(onboarded=False, at=ms(ist(2026, 10, 14, 20)))
+    for _ in range(12):
+        if not await pg.query_selector('#onboarding [data-ob=next]'): break
+        if await pg.query_selector('#onboarding [data-ref=name]'): await pg.fill('#onboarding [data-ref=name]', 'Priya')
+        await pg.click('[data-ob=next]'); await a.tick(250)
+    await a.tick(500)
+    check('Welcome home, Priya' in await pg.inner_text('.greet'), 'flies in after setup')
+    await a.tick(3000)
+    check(not await pg.query_selector('.greet'), 'then flies off')
+    await set_visibility(a, 'hidden'); await a.tick(10 * 60e3); await set_visibility(a, 'visible'); await a.tick(200)
+    check(not await pg.query_selector('.greet'), 'not after only 10 minutes away')
+    await set_visibility(a, 'hidden'); await a.tick(31 * 60e3); await set_visibility(a, 'visible'); await a.tick(200)
+    check(await pg.query_selector('.greet'), 'greets again after 30+ minutes away')
+    await a.tick(3000)
+    await a.js('features/tasks.js', "(m.all().forEach(t => m.remove(t.id)), true)")
+    await a.fire_direct(test=False); await a.type_phrase(); await a.tick(800)
+    check(not await pg.query_selector('.greet.victory'), 'no lap over the report card')
+    await pg.click('#morning [data-ref=close]'); await a.tick(600)
+    check(await pg.query_selector('.greet.victory') and 'Morning proven' in await pg.inner_text('.greet.victory'), 'victory lap after closing the report card')
+    check(await pg.evaluate("getComputedStyle(document.querySelector('.greet.victory')).pointerEvents") == 'none', 'victory lap never blocks taps')
+
+@test('Pip', 'invalid', 'With reduced motion, Pip appears and waves without leaping')
+async def t_pip_reduced(a):
+    pg = await a.open(at=ms(ist(2026, 10, 14, 9)))
+    await a.tick(3000)  # let the opening greeting finish
+    await pg.emulate_media(reduced_motion='reduce')
+    await a.js('ui/pet-view.js', '(m.greet(), true)'); await pg.wait_for_timeout(100)
+    check(await pg.query_selector('.greet.still .pet.waving'), 'still, waving')
+    check(not await pg.query_selector('.greet .pet.flying'), 'no flight')
+
+# ---------- Naps
+@test('Naps', 'valid', '“Going to sleep” in the afternoon asks about a nap, sets a timer, wakes you, and logs the nap as sleep')
+async def t_nap(a):
+    pg = await a.open(seed=NO_PROMPTS, at=ms(ist(2026, 10, 14, 15)))
+    await pg.click('.sleep-card [data-ref=now]'); await pg.wait_for_timeout(150)
+    check('Taking a nap?' in await pg.inner_text('.sheet'), 'asks about a nap')
+    await pg.click('.sheet [data-nap="20"]'); await pg.wait_for_timeout(150)
+    check('15:20' in await a.toast_text() or '3:20' in await a.toast_text(), f'timer confirmed: {await a.toast_text()}')
+    check('Napping till' in await pg.inner_text('.sleep-card'), 'card shows the nap')
+    check(await a.js('features/sleep.js', 'm.get().pending.bedAt') is None, 'not logged as a night')
+    await a.tick(19 * 60e3)
+    check(not await a.visible('#nap'), 'not yet')
+    await a.tick(61e3)
+    check(await a.visible('#nap') and 'Nap’s over' in await pg.inner_text('#nap'), 'wakes you')
+    await pg.click('#nap [data-ref=up]'); await pg.wait_for_timeout(200)
+    check(not await a.visible('#nap'), 'stops')
+    naps = await a.js('features/sleep.js', 'm.get().naps')
+    check(len(naps) == 1 and abs(naps[0]['hours'] - 0.33) < 0.02, f'nap logged {naps}')
+    w = await a.js('features/sleep.js', 'm.week()')
+    check(w['count'] == 1 and abs(w['nights'][0]['total'] - 0.3) < 0.05, f'counted in the week {w}')
+    await a.tab('progress')
+    check(await pg.query_selector('.sleep-chart .nap-part'), 'nap shown on the chart')
+    check('+ 20 min nap today' in await (await a.tab('alarm') or pg).inner_text('.sleep-card'), 'today’s nap on the card')
+
+@test('Naps', 'valid', 'At bedtime it tracks the night (no nap question); “No, I’m going to bed” also starts a night')
+async def t_nap_night(a):
+    pg = await a.open(seed=NO_PROMPTS, at=ms(ist(2026, 10, 14, 22, 30)))
+    await pg.click('.sleep-card [data-ref=now]'); await pg.wait_for_timeout(150)
+    check(not await pg.query_selector('.sheet'), 'no nap question at night')
+    check(await a.js('features/sleep.js', 'm.get().pending.bedAt'), 'night started')
+    await a.js('features/sleep.js', '(m.notTonight(), true)')
+    await a.jump(10 * 3600e3)  # 08:30 next day, outside the sleep window
+    await a.tab('alarm')
+    await pg.click('.sleep-card [data-ref=now]'); await pg.wait_for_timeout(150)
+    await pg.click('.sheet [data-night]'); await pg.wait_for_timeout(150)
+    check(await a.js('features/sleep.js', 'm.get().pending.bedAt'), 'night started from the nap sheet')
+
+@test('Naps', 'invalid', 'Nap length stays between 5 minutes and 4 hours; waking early logs the real time; cancelling sets nothing')
+async def t_nap_limits(a):
+    pg = await a.open(seed=NO_PROMPTS, at=ms(ist(2026, 10, 14, 14)))
+    r = await a.js('features/sleep.js', "[m.startNap(1).endAt - m.napState().startAt, (m.endNap(), m.startNap(999).endAt - m.napState().startAt), (m.endNap(), m.startNap('soon'))]")
+    check(r[0] == 5 * 60e3 and r[1] == 240 * 60e3 and r[2] is None, f'limits {r}')
+    await a.js('features/sleep.js', "(m.get().naps.length, true)")
+    await pg.click('.sleep-card [data-ref=now]'); await pg.wait_for_timeout(150)
+    for _ in range(10): await pg.click('.sheet [data-d="-5"]')
+    check(await pg.inner_text('.sheet [data-ref=out]') == '5 min', 'custom stops at 5 min')
+    await pg.mouse.click(5, 5); await pg.wait_for_timeout(150)
+    check(await a.js('features/sleep.js', 'm.napState()') is None, 'cancelled: no nap')
+    await pg.click('.sleep-card [data-ref=now]'); await pg.wait_for_timeout(150)
+    await pg.click('.sheet [data-nap="45"]'); await pg.wait_for_timeout(100)
+    await a.tick(12 * 60e3)
+    await pg.click('.sleep-card [data-ref=wakeNap]'); await pg.wait_for_timeout(150)
+    last = (await a.js('features/sleep.js', 'm.get().naps'))[0]
+    check(abs(last['hours'] - 0.2) < 0.02, f'logged the real 12 minutes: {last}')
+
+@test('Naps', 'valid', 'In the app, the nap alarm is Android’s (rings with the app closed) and “I’m up” silences it')
+async def t_nap_native(a):
+    pg = await a.open(seed=NO_PROMPTS, native={}, at=ms(ist(2026, 10, 14, 16)))
+    await pg.click('.sleep-card [data-ref=now]'); await pg.wait_for_timeout(150)
+    await pg.click('.sheet [data-nap="30"]'); await pg.wait_for_timeout(150)
+    sch = [c['args'] for c in await first_light(a, 'schedule') if c['args'].get('kind') == 'nap']
+    check(sch and abs(sch[0]['at'] - ms(ist(2026, 10, 14, 16, 30))) < 5000, f'nap scheduled with Android: {sch}')
+    await pg.evaluate("window.__nativeEmit('alarm', { kind: 'nap' })"); await pg.wait_for_timeout(200)
+    check(await a.visible('#nap'), 'nap screen when Android rings')
+    await pg.click('#nap [data-ref=up]'); await pg.wait_for_timeout(200)
+    check(await first_light(a, 'stopRinging') and [c for c in await first_light(a, 'cancel') if c['args']['id'] == 'nap'], 'ringing stopped, alarm cleared')
+
+# ---------- Morning: step away, quick test
+@test('Morning', 'valid', 'You can leave the task list: a top-bar pill counts down, says when it’s time, and brings you back')
+async def t_leave(a):
+    pg = await a.open(seed={'fl:tasks': [{'id': 'tea', 'name': 'Tea is ready', 'proof': 'tea', 'gapMin': 10}]}, at=ms(ist(2026, 10, 14, 7)))
+    await a.fire_direct(); 
+    check(not await a.visible('#morning [data-ref=leave]'), 'no leaving while it rings')
+    await a.type_phrase()
+    await pg.click('#morning [data-ref=leave]'); await pg.wait_for_timeout(150)
+    check(not await a.visible('#morning'), 'task screen steps aside')
+    pill = await pg.inner_text('#appbar .pill')
+    check('Tea is ready' in pill and '10:00' in pill or '9:5' in pill, f'countdown pill {pill!r}')
+    await a.tab('tasks'); await a.tab('progress')
+    check(await pg.is_visible('[data-tab=progress]'), 'the app is usable')
+    await a.tick(5 * 60e3 + 1000)
+    check(await a.visible('#checkin'), 'the check-in still finds you')
+    await pg.click('#checkin [data-ref=yes]'); await pg.wait_for_timeout(150)
+    check(not await a.visible('#morning'), 'and you stay where you were')
+    await a.tick(5 * 60e3)
+    check(await pg.query_selector('#appbar .pill.ready') and '📸' in await pg.inner_text('#appbar .pill'), 'pill says it’s time')
+    check('time to prove it' in await a.toast_text(), 'and tells you')
+    await pg.click('#appbar .pill'); await pg.wait_for_timeout(150)
+    check(await a.visible('#morning') and await a.visible('#morning [data-gate] button.gold'), 'tap the pill to go back')
+    check(not await pg.query_selector('#appbar .pill'), 'pill gone while the task screen is open')
+
+@test('Morning', 'valid', 'In the app, a task’s wait is handed to Android as a notification')
+async def t_leave_native(a):
+    pg = await a.open(native={}, seed={'fl:tasks': [{'id': 'tea', 'name': 'Tea is ready', 'proof': 'tea', 'gapMin': 10}]}, at=ms(ist(2026, 10, 14, 7)))
+    await a.fire_direct(); await a.type_phrase()
+    sch = [c['args'] for c in await first_light(a, 'schedule') if c['args'].get('kind') == 'task']
+    check(sch and sch[0]['title'].startswith('Tea is ready') and abs(sch[0]['at'] - ms(ist(2026, 10, 14, 7, 10))) < 5000, f'task notice {sch}')
+
+@test('Morning', 'valid', 'Test alarm ends right after the phrase (“It works!”); “Try the full morning” runs tasks and check-in at 10× speed')
+async def t_quick_test(a):
+    pg = await a.open(seed={'fl:tasks': [{'id': 'tea', 'name': 'Tea', 'proof': 'tea', 'gapMin': 10}]}, at=ms(ist(2026, 10, 14, 21)))
+    await pg.click('[data-ref=test]'); await a.tick(11_000)
+    await a.type_phrase()
+    check(await a.phase() == 'done' and 'It works!' in await pg.inner_text('#morning'), 'quick test done')
+    await a.tick(6 * 60e3)
+    check(not await a.visible('#checkin'), 'no check-in after a quick test')
+    await pg.click('#morning [data-ref=full]'); await pg.wait_for_timeout(200)
+    m = await a.js('features/morning.js', 'm.get()')
+    check(m['phase'] == 'ringing' and m['test'] and m['full'], f'full test started {m}')
+    await a.type_phrase()
+    check(await a.phase() == 'tasks', 'tasks run in the full test')
+    unlock = await a.js('features/morning.js', 'm.currentUnlocksAt() - m.get().dismissedAt')
+    check(unlock == 60_000, f'a 10 min wait takes 1 min: {unlock}')
+    await a.tick(31_000)
+    check(await a.visible('#checkin'), 'check-in after 30 s instead of 5 min')
+    await pg.click('#checkin [data-ref=yes]')
+    check(await a.js('features/stats.js', 'm.get().wins') == 0, 'tests never count')
+
+# ---------- Sharing
+@test('Sharing', 'valid', 'Sharing a Spotify playlist sets it as the alarm (no sign-in), named from Spotify')
+async def t_share_spotify(a):
+    pg = await a.open()
+    await a.js('core/events.js', f"m.emit('share:text', {{ text: 'Listen to this {SP_LINK}' }})"); await pg.wait_for_timeout(400)
+    st = await a.js('features/sources/spotify.js', 'm.status()')
+    check(st['link'] and st['link']['id'] == '37i9dQZF1DX0UrRvztWcAU' and st['link']['type'] == 'playlist', f'link saved {st}')
+    check(await a.js('features/music.js', 'm.status().source') == 'spotify', 'Spotify chosen')
+    check(await pg.is_visible('[data-tab=sounds]'), 'shows the Music tab')
+    check('Rise and Grind' in await pg.inner_text('[data-tab=sounds]'), 'real playlist name')
+
+@test('Sharing', 'valid', 'YouTube: a playlist becomes the alarm; a Short becomes a clip; a single video asks which')
+async def t_share_youtube(a):
+    pg = await a.open()
+    await a.js('core/events.js', "m.emit('share:text', { text: 'https://music.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG' })"); await pg.wait_for_timeout(300)
+    check(await a.js('features/music.js', 'm.status().source') == 'youtube', 'playlist → alarm')
+    await a.js('core/events.js', "m.emit('share:text', { text: 'https://youtube.com/shorts/aqz-KE-bpKQ?si=x' })"); await pg.wait_for_timeout(300)
+    check(len(await a.js('features/boost.js', 'm.linkClips()')) == 1, 'Short → clip')
+    await a.js('core/events.js', "m.emit('share:text', { text: 'https://youtu.be/dQw4w9WgXcQ' })"); await pg.wait_for_timeout(300)
+    check('Use this video for' in await pg.inner_text('.sheet'), 'asks about a single video')
+    await pg.click('.sheet .btn:has-text("Motivation")'); await pg.wait_for_timeout(200)
+    check(len(await a.js('features/boost.js', 'm.linkClips()')) == 2, 'saved as a clip')
+
+@test('Sharing', 'invalid', 'Odd shares are handled kindly: other sites refused, repeats ignored, short Spotify links explained')
+async def t_share_bad(a):
+    pg = await a.open()
+    await a.js('core/events.js', "m.emit('share:text', { text: 'https://example.com/hello' })"); await pg.wait_for_timeout(200)
+    check('Spotify, YouTube and Instagram' in await a.toast_text(), 'other sites refused')
+    await a.js('core/events.js', "m.emit('share:text', { text: 'no link here' })"); await pg.wait_for_timeout(200)
+    check('Spotify, YouTube and Instagram' in await a.toast_text(), 'plain text refused')
+    for _ in range(2):
+        await a.js('core/events.js', "m.emit('share:text', { text: 'https://www.instagram.com/reel/C9abcDEF123/?igsh=x' })"); await pg.wait_for_timeout(200)
+    check(len(await a.js('features/boost.js', 'm.linkClips()')) == 1, 'the same share twice is saved once')
+    await a.js('core/events.js', "m.emit('share:text', { text: 'https://spotify.link/AbCdEf' })"); await pg.wait_for_timeout(300)
+    check('Copy link' in await a.toast_text(), 'short link: asks for Copy link in the browser version')
+    r = await a.js('features/boost.js', "[m.addLink('not a link').ok, m.addLink('https://vimeo.com/1').ok, m.addLink('https://www.instagram.com/reel/C9abcDEF123/').ok, m.addLink('https://youtube.com/watch?v=short').ok]")
+    check(r == [False, False, False, False], f'clip links validated {r}')
+
+@test('Sharing', 'valid', 'In the app: a link shared while First Light was closed is picked up when it opens')
+async def t_share_native(a):
+    pg = await a.open(native={'launch': {'shared': 'Check this out https://www.instagram.com/reel/C9abcDEF123/'}})
+    await pg.wait_for_timeout(400)
+    check(len(await a.js('features/boost.js', 'm.linkClips()')) == 1, 'reel saved from the share')
+    check('Clip saved' in await a.toast_text(), 'confirmed')
+
+# ---------- Spotify (shared link) & clips
+@test('Spotify', 'valid', 'Shared playlist plays in Spotify’s official player on the alarm screen; “Play on Spotify” opens the app')
+async def t_sp_embed(a):
+    pg = await a.open(native={}, seed={'fl:music': {'source': 'spotify'}, 'fl:tasks': []})
+    await a.js('features/sources/spotify.js', f"m.setLink('{SP_LINK}')")
+    await a.fire_direct(); await a.tick(1500)
+    check(await a.js('features/music.js', 'm.status().playing') == 'spotify', 'Spotify playing')
+    created = await pg.evaluate('window.__spEmbed.created')
+    check(created == ['spotify:playlist:37i9dQZF1DX0UrRvztWcAU'], f'embed {created}')
+    check(await a.visible('#media-stage iframe'), 'player visible on the alarm screen')
+    await a.type_phrase(); await pg.wait_for_timeout(200)
+    check(not await a.visible('#media-stage'), 'player removed when stopped')
+    await a.js('features/morning.js', '(m.close(), true)')
+    await a.tab('sounds')
+    await pg.click('[data-tab=sounds] [data-ref=open]'); await pg.wait_for_timeout(150)
+    check(await pg.evaluate('window.__opened') == ['spotify:playlist:37i9dQZF1DX0UrRvztWcAU'], 'opens in the Spotify app')
+
+@test('Spotify', 'invalid', 'Shared playlist that never starts falls back to your songs within 8 seconds')
+async def t_sp_embed_fail(a):
+    pg = await a.open(net={'spembed': 'silent'}, seed={'fl:music': {'source': 'spotify'}, 'fl:tasks': []})
+    await a.js('features/sources/spotify.js', f"m.setLink('{SP_LINK}')")
+    await a.fire_direct(); await a.tick(9000)
+    check(await a.js('features/music.js', 'm.status().playing') in ('local', 'beeps'), 'backup playing')
+    check(await a.js('features/music.js', 'm.status().lastFallback.source') == 'spotify', 'fallback recorded')
+
+@test('Spotify', 'invalid', 'Spotify links are checked: only open.spotify.com playlists, albums and songs')
+async def t_sp_link_check(a):
+    await a.open()
+    r = await a.js('features/sources/spotify.js', """[m.parseLink('https://open.spotify.com/intl-de/album/4aawyAB9vmqN3uQ7FjRGTy').ok, m.parseLink('https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl?si=1').type,
+      m.parseLink('https://open.spotify.com/artist/0OdUWJ0sBjDrqHygGUXeCF').ok, m.parseLink('https://evil.com/playlist/37i9dQZF1DX0UrRvztWcAU').ok, m.parseLink('spotify').ok]""")
+    check(r == [True, 'track', False, False, False], f'checked {r}')
+
+@test('Boost', 'valid', 'A saved YouTube Short or Instagram reel plays in its own embedded player after the check-in')
+async def t_boost_links(a):
+    pg = await a.open(seed={'fl:tasks': ONE_TASK})
+    await a.js('features/boost.js', "m.addLink('https://youtube.com/shorts/aqz-KE-bpKQ')")
+    await a.fire_direct(); await a.type_phrase()
+    await a.tick(5 * 60_000 + 1000)
+    await pg.click('#checkin [data-ref=yes]'); await pg.wait_for_timeout(500)
+    src = await pg.get_attribute('#boost iframe', 'src')
+    check(src and src.startswith('https://www.youtube.com/embed/aqz-KE-bpKQ'), f'YouTube embed {src}')
+    await a.tick(8500)
+    check(await pg.is_enabled('#boost [data-ref=close]'), 'can close after a few seconds')
+
+# ---------- Layout
+@test('Layout', 'invalid', 'No screen scrolls sideways on a small 320 px phone (widest fonts, city themes)', timeout=180)
+async def t_layout_320(a):
+    FIND = """() => { const W = document.documentElement.clientWidth; const over = document.documentElement.scrollWidth - W;
+      const bad = [...document.querySelectorAll('body *')].filter(el => { const cs = getComputedStyle(el); if (cs.display === 'none' || el.closest('svg,.greet,.m-burst')) return false;
+        const r = el.getBoundingClientRect(); if (!r.width) return false; let p = el.parentElement; while (p && p !== document.body) { if (/(hidden|auto|scroll|clip)/.test(getComputedStyle(p).overflowX)) return false; p = p.parentElement; } return r.right > W + 1; })
+        .map(el => el.tagName + '.' + el.className).slice(0, 5); return { over, bad }; }"""
+    problems = []
+    for font, style, theme in [('typewriter', 'bold', 'kerala'), ('formal', 'elegant', 'sanfrancisco')]:
+        b = App(a.browser)
+        try:
+            pg = await b.open(viewport={'width': 320, 'height': 700}, seed={'fl:profile': {'name': 'Priyadarshini', 'onboarded': True, 'font': font, 'style': style, 'theme': theme}}, native={}, at=ms(ist(2026, 10, 14, 15)))
+            async def look(where):
+                r = await pg.evaluate(FIND)
+                if r['over'] > 0 or r['bad']: problems.append(f"{font}/{where}: +{r['over']}px {r['bad']}")
+            for t in ['alarm', 'tasks', 'sounds', 'progress']:
+                await b.tab(t); await look(t)
+            for g in await b.js('ui/drawer.js', 'm.GROUPS.map(g => g.id)'):
+                await b.menu(g); await look(g)
+            await b.fire_direct(); await look('ringing'); await b.type_phrase(); await look('tasks')
+        finally:
+            await b.close()
+    check(not problems, f'overflow: {problems}')
+
+@test('App', 'valid', 'Long explanations sit behind ⓘ buttons that open a short sheet')
+async def t_info(a):
+    pg = await a.open()
+    await a.tab('sounds')
+    n = len(await pg.query_selector_all('[data-tab=sounds] .info-btn'))
+    check(n >= 3, f'info buttons {n}')
+    await pg.click('[data-tab=sounds] .info-btn >> nth=0'); await pg.wait_for_timeout(150)
+    check(await a.visible('.sheet') and len(await pg.inner_text('.sheet p')) > 20, 'explanation in a sheet')
 
 # ================================================================== runner
 class Quiet(http.server.SimpleHTTPRequestHandler):
@@ -1532,13 +2016,13 @@ async def main(filter_text):
             start = time.time()
             status, err = 'PASS', ''
             try:
-                await asyncio.wait_for(t['fn'](a), timeout=60)
+                await asyncio.wait_for(t['fn'](a), timeout=t.get('timeout', 60))
                 if a.errors:
                     status, err = 'FAIL', 'Page error: ' + '; '.join(a.errors)[:300]
             except Fail as e:
                 status, err = 'FAIL', str(e)
             except Exception as e:
-                status, err = 'FAIL', f'{type(e).__name__}: {str(e).splitlines()[0][:300]}'
+                status, err = 'FAIL', f'{type(e).__name__}: {(str(e).splitlines() or ["(no message)"])[0][:300]}'
             finally:
                 try: await a.close()
                 except Exception: pass
@@ -1558,7 +2042,7 @@ def write_report(results):
         '# First Light — test report', '',
         f"Run on {time.strftime('%Y-%m-%d %H:%M')} in headless Chromium at phone size (390×844).", '',
         f"**{passed} of {len(results)} passed.** {len(valid)} valid-use cases, {len(invalid)} invalid-input or failure cases.", '',
-        'Spotify and YouTube were replaced with local stand-ins (`tests/mocks/`), so these tests prove the app’s handling of each response, not Spotify’s or YouTube’s own servers. Run a test alarm on your phone to confirm those end to end.', '',
+        'Spotify, YouTube, the Android bridge, and the city weather/news/Wikipedia services were replaced with local stand-ins (`tests/mocks/` and routes in `App._route_net`), so these tests prove the app’s handling of each response, not those servers themselves. Run a test alarm on your phone to confirm those end to end.', '',
         '| Result | Group | Type | Test | Time |', '|---|---|---|---|---|'
     ]
     for r in results:

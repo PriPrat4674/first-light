@@ -3,9 +3,7 @@ import { esc, vibrateTap } from '../core/util.js';
 import * as profile from '../features/profile.js';
 import { LOGOS, logoSVG } from './art.js';
 import { THEMES, ACCENTS, FONTS, STYLES, palette, artColours } from './theme.js';
-
-const FONT_FAMILY = { classic: "'Bodoni Moda', serif", modern: "'DM Serif Display', serif", friendly: "'Nunito', sans-serif", typewriter: "'Courier Prime', monospace" };
-const FONT_WEIGHT = { classic: 600, modern: 400, friendly: 800, typewriter: 700 };
+import { SKYLINES } from './scene.js';
 
 function option(kind, value, current, inner, label) {
   return `<button type="button" class="pick pick-${kind}" data-pick="${kind}" data-value="${value}" aria-pressed="${value === current}" aria-label="${esc(label)}">${inner}</button>`;
@@ -24,15 +22,19 @@ export function picker(kind, current = profile.get()[kind]) {
     }).join('')}</div>`;
   }
   if (kind === 'theme') {
-    return `<div class="picks picks-2">${Object.entries(THEMES).map(([id, t]) => {
+    const tile = ([id, t]) => {
       const v = palette(id, p.accent);
-      const mini = `<span class="mini" style="background:${t.bg};border-color:${t.hair2}"><b style="color:${t.text};font-family:${FONT_FAMILY[p.font]}">6:30</b><i style="background:${v['--accent']}"></i><em style="background:${t.surface2}"></em></span>`;
+      const city = t.city && SKYLINES[id] ? `<svg class="mini-city" viewBox="0 120 400 80" preserveAspectRatio="xMidYMax slice" aria-hidden="true" style="color:${t.text}">${SKYLINES[id]()}</svg>` : '';
+      const mini = `<span class="mini" style="background:${t.bg};border-color:${t.hair2}"><b style="color:${t.text};font-family:${FONTS[p.font].family}">6:30</b><i style="background:${v['--accent']}"></i>${city || `<em style="background:${t.surface2}"></em>`}</span>`;
       return option('theme', id, current, `${mini}<span><strong>${t.label}</strong><small>${t.note}</small></span>`, `${t.label} theme`);
-    }).join('')}</div>`;
+    };
+    const all = Object.entries(THEMES);
+    return `<p class="pick-group">Moods</p><div class="picks picks-2">${all.filter(([, t]) => !t.city).map(tile).join('')}</div>
+      <p class="pick-group">Cities <span class="muted">· live weather & local news</span></p><div class="picks picks-2">${all.filter(([, t]) => t.city).map(tile).join('')}</div>`;
   }
   if (kind === 'font') {
     return `<div class="picks picks-2">${Object.entries(FONTS).map(([id, f]) => option('font', id, current,
-      `<span class="font-sample" style="font-family:${FONT_FAMILY[id]};font-weight:${FONT_WEIGHT[id]}">Aa 6:30</span><span><strong>${f.label}</strong><small>${f.note}</small></span>`, `${f.label} font`)).join('')}</div>`;
+      `<span class="font-sample" style="font-family:${f.family};font-weight:${f.weight}">Aa 6:30</span><span><strong>${f.label}</strong><small>${f.note}</small></span>`, `${f.label} font`)).join('')}</div>`;
   }
   if (kind === 'style') {
     const radius = { elegant: '12px', soft: '999px', bold: '6px' }, border = { elegant: '1px', soft: '0px', bold: '2px' };

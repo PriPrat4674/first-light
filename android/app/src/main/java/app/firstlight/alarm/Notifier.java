@@ -11,6 +11,7 @@ import android.os.Build;
 final class Notifier {
     static final int BEDTIME_ID = 4301;
     static final int ASLEEP_ID = 4302;
+    static final int TASK_ID = 4303;
 
     private Notifier() {}
 
@@ -41,6 +42,17 @@ final class Notifier {
             .addAction(action(c, "Still awake", ActionReceiver.STILL_AWAKE, 34));
         if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(20 * 60 * 1000);
         post(c, ASLEEP_ID, b.build());
+    }
+
+    /** "Tea is ready ⏰": a task's wait is over. Tapping opens First Light on the task list. */
+    static void task(Context c, String title, String text) {
+        Notification.Builder b = builder(c, Sounds.channel(c, "bedtime", Prefs.sound(c, "message", "chime")))
+            .setContentTitle(title != null ? title : "Next task is ready ⏰")
+            .setContentText(text != null ? text : "Time to take your proof photo 📸")
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(c, 22));
+        post(c, TASK_ID, b.build());
     }
 
     static void cancel(Context c, int id) {

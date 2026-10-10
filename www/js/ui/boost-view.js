@@ -27,7 +27,17 @@ export function mount(root) {
 
   function showClip(clip) {
     if (!clip) { r.close.disabled = false; return; }
-    r.title.textContent = 'Watch this, then go';
+    r.title.textContent = 'Watch this, then go 🚀';
+    if (clip.link) {
+      // Played in the site's own embedded player (credit stays with the creator).
+      const src = clip.site === 'youtube'
+        ? `https://www.youtube.com/embed/${encodeURIComponent(clip.vid)}?autoplay=1&playsinline=1&rel=0`
+        : `https://www.instagram.com/${clip.kind === 'p' ? 'p' : 'reel'}/${encodeURIComponent(clip.vid)}/embed`;
+      r.body.innerHTML = `<div class="clip-embed ${clip.site}"><iframe src="${src}" title="Motivation clip" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="eager"></iframe></div>
+        ${clip.site === 'instagram' ? '<p class="small muted" style="margin-top:6px">Tap the reel to play it.</p>' : ''}`;
+      allowClose(8000);
+      return;
+    }
     url = URL.createObjectURL(clip.blob);
     r.body.innerHTML = `<video class="clip" playsinline controls autoplay src="${url}"></video>`;
     const v = r.body.querySelector('video');

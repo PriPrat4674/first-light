@@ -3,7 +3,7 @@ import { on } from '../core/events.js';
 import { refs, esc, dayKey, plural } from '../core/util.js';
 import * as stats from '../features/stats.js';
 import * as snooze from '../features/snooze.js';
-import { sunburst } from './components.js';
+import { sunburst, info } from './components.js';
 import * as sleep from '../features/sleep.js';
 import * as applock from '../features/applock.js';
 import * as native from '../services/native.js';
@@ -23,17 +23,15 @@ export function mount(root) {
     <div class="card">
       <div class="card-head"><h3>Last five weeks</h3></div>
       <div class="cal" data-ref="cal"></div>
-      <div class="legend"><span><i style="background:var(--accent)"></i>Proven</span><span><i style="border:1px solid var(--danger)"></i>Paused by battery guard</span></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Proven</span>${native.isNative() ? '' : '<span><i style="border:1px solid var(--danger)"></i>Battery pause</span>'}</div>
     </div>
     <div class="card">
-      <div class="card-head"><h3>Sleep this week 🌙</h3><span class="small muted" data-ref="sleepAvg"></span></div>
+      <div class="card-head"><h3>Sleep this week 🌙 ${info('Sleep', 'Time in bed, from “Going to sleep” to stopping the alarm, plus naps. Not a medical measurement.')}</h3><span class="small muted" data-ref="sleepAvg"></span></div>
       <div data-ref="sleepChart"></div>
-      <p class="small muted italic" style="margin-top:8px">Time in bed: from “Going to sleep” to stopping the alarm. Not a medical measurement.</p>
     </div>
     <div class="stat-grid" data-ref="grid"></div>
     <div class="card">
-      <h3>Hall of Shame</h3>
-      <p class="soft">Every snooze, forever.</p>
+      <h3>Hall of Shame 😤</h3>
       <ul class="list" data-ref="shame"></ul>
     </div>
     <div class="card">

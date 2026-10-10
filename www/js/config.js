@@ -1,9 +1,13 @@
 // App-wide constants and defaults. Change copy and defaults here, not inside features.
 
 export const APP_NAME = 'First Light';
-export const VERSION = '3.0.0';
+export const VERSION = '3.1.0';
 
 export const TEST_DELAY_MS = 10_000;
+
+// Pip artwork: names of the images in www/img/pip/ (as .webp). Empty = Pip is drawn in code.
+// Pip is a baby tiger. Poses: ecstatic, happy, neutral, grumpy, sleepy, sulking, leap-1, leap-2, wave, sleeping.
+export const PIP_ART = ['ecstatic', 'happy', 'neutral', 'grumpy', 'sleepy', 'sulking', 'leap-1', 'leap-2', 'wave', 'sleeping'];
 // If the app was closed through a scheduled alarm, skip it rather than ringing hours late.
 export const STALE_ALARM_MS = 30 * 60 * 1000;
 export const DEFAULT_ALARM_TIME = '06:30';
@@ -62,7 +66,17 @@ export const RETRY_PHRASES = [
   'I promise to stop negotiating with my pillow'
 ];
 
-// Spotify: create an app at developer.spotify.com and paste its Client ID in Sounds.
+// Sleep goal range in hours (students on tight schedules can set low goals; never zero or negative).
+export const SLEEP_GOAL_LIMITS = [1, 12];
+// Nap timer choices (minutes) and limits.
+export const NAP_PRESETS = [20, 30, 45, 60, 90];
+export const NAP_LIMITS = [5, 240];
+
+// Spotify "Connect" for full songs. This is the Client ID of the First Light app on
+// developer.spotify.com (owned by a Premium account). It isn't a secret: sign-in uses PKCE.
+// Leave it empty to offer only "share a playlist" (30-second previews, no sign-in).
+// Spotify allows up to 5 named accounts per app in Development Mode (add them under User Management).
+export const SPOTIFY_CLIENT_ID = '41df59fe21cf4799a5be137b7080b140';
 export const SPOTIFY_SCOPES = [
   'streaming', 'user-read-email', 'user-read-private',
   'user-read-playback-state', 'user-modify-playback-state', 'playlist-read-private'

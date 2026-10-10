@@ -10,7 +10,9 @@ import * as spotify from '../features/sources/spotify.js';
 import * as battery from '../services/battery.js';
 import * as audio from '../services/audio.js';
 import { requestPermission } from '../services/notify.js';
-import { sunburst, setSunburst, sheet, ICONS } from './components.js';
+import { sheet, ICONS } from './components.js';
+import { scene, DEFAULT_SUN, skyState } from './scene.js';
+import * as places from '../features/places.js';
 import * as tabs from './tabs.js';
 import * as native from '../services/native.js';
 import * as profile from '../features/profile.js';
@@ -33,11 +35,11 @@ const timeParts = (hhmm) => {
 export function mount(root) {
   root.innerHTML = `
     <section class="home-hero">
-      <div class="brand">${APP_NAME}</div>
       <div class="clock" data-ref="clock">--:--</div>
       <div class="date" data-ref="date"></div>
-      <div class="burst-wrap" data-ref="burst">${sunburst({ lit: 0.15, label: 'Sunrise' })}</div>
+      <div class="burst-wrap" data-ref="burst"></div>
     </section>
+    <div class="card city-card hidden" data-ref="city"></div>
 
     <div class="card alarm-card">
       <label class="time-pick">
@@ -59,7 +61,7 @@ export function mount(root) {
         <button class="btn line" data-ref="disarm">Disarm</button>
       </div>
 
-      <div class="row between" style="margin-top:10px">
+      <div class="row between wrap" style="margin-top:10px">
         <button class="btn quiet" data-ref="test">Try a test alarm</button>
         <span class="battery-pill hidden" data-ref="batt"></span>
       </div>
@@ -73,23 +75,53 @@ export function mount(root) {
     <div class="card">
       <div class="card-head"><h3>Tomorrow’s ritual</h3><button class="btn quiet" data-ref="edit">Edit</button></div>
       <ol class="ritual" data-ref="ritual"></ol>
-    </div>
-
-    <div class="card notice">
-      <h3>Before bed</h3>
-      <p class="soft" style="margin-top:6px">${inApp
-        ? `Slide to arm, then lock your phone and sleep. ${APP_NAME} rings even when it’s closed, using Android’s own alarm system, so it won’t drain your battery overnight 🔋`
-        : `Arm the alarm and leave ${APP_NAME} open on its night screen. It’s pure black, which uses very little power on most phones. Plug in if you can. If the battery falls to the guard level unplugged, the alarm switches itself off so your phone survives the night.`}</p>
     </div>`;
   const r = refs(root);
 
   /* ----- status ----- */
   function statusText(now) {
     const a = alarm.status();
-    if (a.testAt) return `Test alarm in ${fmtDur(a.testAt - now)}.`;
-    if (a.armedAt) return `Armed. Rings in ${fmtDur(a.armedAt - now)}.`;
-    return 'Not armed. Slide to arm before you sleep.';
+    if (a.testAt) return `Test alarm in ${fmtDur(a.testAt - now)} ⏳`;
+    if (a.armedAt) return `Armed · rings in ${fmtDur(a.armedAt - now)}`;
+    return inApp ? 'Not armed yet. Slide before bed.' : 'Not armed yet. Slide, then leave me open.';
   }
+
+  /* ----- sky + city ----- */
+  let skyKey = '', lastMinute = -1;
+  function paintSky(now = Date.now(), force = false) {
+    const city = places.info(now);
+    let mins, rise = DEFAULT_SUN.rise, set = DEFAULT_SUN.set;
+    if (city) {
+      mins = places.minutesIn(city.tz, now);
+      if (city.weather?.sunrise && city.weather?.sunset) { rise = places.minutesIn(city.tz, city.weather.sunrise); set = places.minutesIn(city.tz, city.weather.sunset); }
+    } else {
+      const d = new Date(now); mins = d.getHours() * 60 + d.getMinutes();
+    }
+    const st = skyState(mins, rise, set);
+    const fx = city?.weather?.fx || null;
+    const key = `${st.phase}|${Math.round(st.lit * 12)}|${Math.round(st.alt * 12)}|${city?.id || ''}|${fx}`;
+    if (!force && key === skyKey) return;
+    skyKey = key;
+    r.burst.innerHTML = scene({ mins, rise, set, city: city?.id || null, fx, seed: 7, label: `${st.label}${city ? ` in ${city.name}` : ''}` });
+  }
+
+  let showFact = null;
+  function paintCity() {
+    const c = places.info();
+    r.city.classList.toggle('hidden', !c);
+    if (!c) return;
+    const first = showFact === null ? (c.headlineFirst && c.news ? 'news' : 'fact') : showFact ? 'fact' : 'news';
+    const useNews = first === 'news' && c.news;
+    const line = useNews
+      ? `<span aria-hidden="true">📰</span><button class="link-btn" data-open="${esc(c.news.url)}">${esc(c.news.title)}</button>`
+      : `<span aria-hidden="true">💡</span><span>${esc(c.fact.text)}${c.fact.url ? ` <button class="link-btn small" data-open="${esc(c.fact.url)}">Wikipedia</button>` : ''}</span>`;
+    r.city.innerHTML = `
+      <div class="city-top"><strong>${esc(c.name)}</strong><span class="muted">${esc(c.time)}</span>${c.weather ? `<span class="wx">${c.weather.emoji} ${c.weather.temp}° ${esc(c.weather.label)}</span>` : ''}</div>
+      <p class="city-line">${line}${c.news ? `<button class="icon-btn swap" data-ref="swap" aria-label="${useNews ? 'Show a fun fact' : 'Show the headline'}">↻</button>` : ''}</p>`;
+    const sw = r.city.querySelector('[data-ref="swap"]');
+    if (sw) sw.onclick = () => { showFact = !!useNews; paintCity(); };
+  }
+  r.city.addEventListener('click', (e) => { const b = e.target.closest('[data-open]'); if (b) native.openUrl(b.dataset.open); });
 
   function render() {
     const a = alarm.status();
@@ -100,7 +132,6 @@ export function mount(root) {
     r.armedBox.classList.toggle('hidden', !a.armed);
     r.status.textContent = statusText(Date.now());
     r.msg.textContent = alarmMessage(a.time, { date: new Date(a.armedAt || Date.now() + 12 * 3600_000), streak: stats.currentStreak(), name: profile.get().name });
-    setSunburst(r.burst.querySelector('svg'), a.armed ? 1 : 0.15, a.armed);
   }
 
   async function renderPerms() {
@@ -110,7 +141,7 @@ export function mount(root) {
     r.permWarn.classList.toggle('hidden', !missing.length);
     if (!missing.length) return;
     const names = { notifications: 'notifications', exactAlarm: 'exact alarms', fullScreen: 'full-screen alarms' };
-    r.permWarn.innerHTML = `<h3>One quick fix ⚠️</h3><p class="small soft" style="margin-top:4px">Allow ${missing.map((m) => names[m]).join(', ')} so your alarm can ring with the app closed.</p><button class="btn gold" data-fix="${missing[0]}" style="margin-top:10px">Fix now</button>`;
+    r.permWarn.innerHTML = `<h3>Let me ring when I’m closed 🔔</h3><p class="small soft" style="margin-top:4px">Allow ${missing.map((m) => names[m]).join(', ')}.</p><button class="btn gold" data-fix="${missing[0]}" style="margin-top:10px">Fix now</button>`;
     r.permWarn.querySelector('[data-fix]').onclick = async (e) => {
       const which = e.target.dataset.fix;
       if (which === 'notifications') { const res = await native.requestNotifications(); if (!res.granted) native.openSettings('notifications'); }
@@ -124,7 +155,7 @@ export function mount(root) {
     r.ritual.innerHTML = list.length
       ? list.map((t, i) => `<li><span class="n">${i + 1}</span><span>${esc(t.name)}</span>${t.gapMin ? `<span class="gap">${t.gapMin} min wait</span>` : ''}</li>`).join('')
         + (chaos ? `<li class="chaos"><span class="n">${list.length + 1}</span><span class="italic">A surprise chaos task</span></li>` : '')
-      : '<li class="muted italic">No tasks yet. The alarm stops as soon as you type the phrase.</li>';
+      : '<li class="muted italic">No tasks yet. Typing the phrase ends it.</li>';
   }
 
   function renderBattery(b = battery.get()) {
@@ -142,15 +173,15 @@ export function mount(root) {
     const check = guard.armCheck();
     if (!check.ok) {
       const choice = await sheet({
-        title: `Battery at ${check.level}%`,
-        body: `Your phone isn’t charging. Keeping the night screen on could drain it. If it reaches ${check.floor}%, the alarm turns itself off to protect your phone.`,
+        title: `Battery at ${check.level}% 🔋`,
+        body: `Not charging. If it drops to ${check.floor}%, I’ll switch the alarm off to save your phone.`,
         actions: [{ label: 'I’ll plug in first', value: 'cancel', style: 'gold' }, { label: 'Arm anyway', value: 'arm' }]
       });
       if (choice !== 'arm') { resetSlide(); return; }
     }
     alarm.arm();
     vibrateTap(30);
-    if (inApp) { toast(`Armed for ${fmtTime(new Date(alarm.status().armedAt))}. I’ll ring even if the app is closed ⏰`); renderPerms(); return; }
+    if (inApp) { toast(`Armed for ${fmtTime(new Date(alarm.status().armedAt))} ⏰ Sleep well!`); renderPerms(); return; }
     requestPermission();
     if (check.unknown) toast('This browser can’t read your battery. Plug in to be safe.', 4000);
     else toast(`Armed for ${fmtTime(new Date(alarm.status().armedAt))}.`);
@@ -184,7 +215,7 @@ export function mount(root) {
   /* ----- other controls ----- */
   r.disarm.onclick = () => { alarm.disarm(); toast('Alarm disarmed.'); };
   if (r.night) r.night.onclick = () => emit('night:open');
-  r.test.onclick = () => { audio.unlock(); if (music.status().source === 'spotify') spotify.prepare(); alarm.test(); toast('A test alarm rings in 10 seconds.'); };
+  r.test.onclick = () => { audio.unlock(); if (music.status().source === 'spotify') spotify.prepare(); alarm.test(); toast('Test alarm in 10 seconds ⏳'); };
   r.time.addEventListener('change', (e) => { if (!e.target.value || !alarm.setTime(e.target.value)) render(); });
   r.edit.onclick = () => tabs.show('tasks');
 
@@ -195,8 +226,12 @@ export function mount(root) {
   on('profile:changed', render);
   on('streak:changed', render);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') renderPerms(); });
+  on('place:changed', () => { paintCity(); paintSky(Date.now(), true); });
+  on('profile:changed', () => { paintCity(); paintSky(Date.now(), true); });
   on('tick', ({ now }) => {
     const d = new Date(now);
+    const minute = Math.floor(now / 60000);
+    if (minute !== lastMinute) { lastMinute = minute; paintSky(now); if (places.current()) paintCity(); }
     r.clock.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false });
     r.date.textContent = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
     r.status.textContent = statusText(now);
@@ -208,4 +243,7 @@ export function mount(root) {
   renderRitual();
   renderBattery();
   renderPerms();
+  paintSky(Date.now(), true);
+  paintCity();
+  places.refresh();
 }

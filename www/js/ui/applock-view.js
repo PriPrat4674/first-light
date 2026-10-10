@@ -3,11 +3,11 @@ import { on } from '../core/events.js';
 import { esc, refs, toast, fmtTime } from '../core/util.js';
 import * as applock from '../features/applock.js';
 import * as native from '../services/native.js';
-import { switchRow, stepperRow, wireSteppers, sheet } from './components.js';
+import { switchRow, stepperRow, wireSteppers, sheet, info } from './components.js';
 
 export function mountPanel(el) {
   if (!native.isNative()) {
-    el.innerHTML = '<h3>App lock 🔒</h3><p class="soft">Keep Instagram and friends closed until your tasks are done. Available in the Android app.</p>';
+    el.innerHTML = '<p class="soft">Keeps Instagram closed till your tasks are done. In the Android app 📱</p>';
     return;
   }
   let apps = null, filter = '';
@@ -15,12 +15,11 @@ export function mountPanel(el) {
     const c = applock.get();
     const st = await native.status();
     el.innerHTML = `
-      <h3>App lock 🔒</h3>
-      <p class="soft">Chosen apps stay closed from when the alarm rings until your morning is proven. Phone, messages and settings are never locked.</p>
-      ${switchRow({ key: 'lock', title: 'Lock apps until my tasks are done', checked: c.enabled })}
-      ${stepperRow({ key: 'maxHours', title: 'Unlock by itself after', desc: 'So you’re never stuck', value: c.maxHours, min: 1, max: 6, unit: ' h' })}
+      ${switchRow({ key: 'lock', title: 'Lock apps till my tasks are done', checked: c.enabled })}
+      ${stepperRow({ key: 'maxHours', title: 'Unlock anyway after', value: c.maxHours, min: 1, max: 6, unit: ' h' })}
+      <p class="small muted">Phone, messages and settings never lock ${info('App lock', 'Chosen apps stay closed from when the alarm rings until your morning is proven. First Light only sees which app opens, never what’s on screen.')}</p>
       <div class="perm ${st.accessibility ? 'ok' : ''}" style="margin-top:8px"><span class="perm-dot">${st.accessibility ? '✓' : '!'}</span>
-        <span class="grow"><strong>Accessibility permission</strong><small>${st.accessibility ? 'On. First Light only sees which app opens, never what’s on screen.' : 'Needed to close locked apps. On Android 13+, first open App info → ⋮ → “Allow restricted settings”.'}</small></span>
+        <span class="grow"><strong>Accessibility</strong><small>${st.accessibility ? 'On ✓' : 'Greyed out? App info → ⋮ → Allow restricted settings'}</small></span>
         ${st.accessibility ? '' : '<button class="btn line" data-ref="perm">Turn on</button>'}</div>
       ${st.accessibility ? '' : '<button class="btn quiet" data-ref="appinfo">Open App info</button>'}
       <div class="row between" style="margin-top:14px"><strong>Apps to lock (${c.packages.length})</strong><button class="btn quiet" data-ref="load">${apps ? 'Refresh' : 'Choose apps'}</button></div>
@@ -52,7 +51,7 @@ export function mountBlocker() {
     const until = st.lockedUntil ? ` It unlocks by itself at ${fmtTime(new Date(st.lockedUntil))}.` : '';
     const v = await sheet({
       title: `${label} is locked 🔒`,
-      body: `Finish your morning tasks first. Future you will thank you.${until}`,
+      body: `Tasks first, then scrolling 😌${until}`,
       actions: [{ label: 'Back to my tasks', value: 'ok', style: 'gold' }, { label: 'Emergency unlock', value: 'emergency' }]
     });
     if (v === 'emergency') emergency();
