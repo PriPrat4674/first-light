@@ -1,0 +1,27 @@
+01. Setup - meet Pip — 01-setup---meet-pip.png
+02. Setup - name typed — 02-setup---name-typed.png
+03. Setup - logo — 03-setup---logo.png
+04. Setup - colour — 04-setup---colour.png
+05. Setup - theme — 05-setup---theme.png
+06. Setup - font — 06-setup---font.png
+07. Setup - style — 07-setup---style.png
+08. Setup - sleep schedule — 08-setup---sleep-schedule.png
+09. Setup - Android permissions — 09-setup---android-permissions.png
+10. Setup - notifications allowed — 10-setup---notifications-allowed.png
+11. Setup - all set — 11-setup---all-set.png
+12. Alarm tab - first look — 12-alarm-tab---first-look.png
+13. Tasks - added Make the bed — 13-tasks---added-make-the-bed.png
+14. Sounds — 14-sounds.png
+15. Settings — 15-settings.png
+16. Armed — 16-armed.png
+17. Morning - ringing — 17-morning---ringing.png
+18. Morning - typing with a mistake — 18-morning---typing-with-a-mistake.png
+19. Morning - tasks — 19-morning---tasks.png
+20. Morning - first task proven — 20-morning---first-task-proven.png
+21. Morning - check-in — 21-morning---check-in.png
+22. Morning - report card — 22-morning---report-card.png
+23. Progress — 23-progress.png
+24. Alarm tab - after first morning — 24-alarm-tab---after-first-morning.png
+25. App lock reminder — 25-app-lock-reminder.png
+26. Ivory, rose, friendly, bold — 26-ivory,-rose,-friendly,-bold.png
+27. Dusk, gold, typewriter, elegant — 27-dusk,-gold,-typewriter,-elegant.png
